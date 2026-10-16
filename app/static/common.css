@@ -1,0 +1,54 @@
+:root {
+  --app-ink: #352d25;
+  --app-muted: #796b5e;
+  --app-paper: #fffaf2;
+  --app-accent: #9a4b28;
+  --app-border: #ded0bf;
+  --app-radius: 10px;
+}
+
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--app-border);
+}
+
+.app-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  background: var(--app-paper);
+  color: var(--app-ink);
+  font: 600 13px/1.3 "Microsoft YaHei", "PingFang SC", sans-serif;
+  text-decoration: none;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.app-link:hover { background: #f2e5d4; border-color: #b49474; }
+.app-link.primary { background: var(--app-accent); border-color: var(--app-accent); color: #fffaf2; }
+:is(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid #a75526;
+  outline-offset: 3px;
+}
+button:disabled { cursor: wait; opacity: .58; }
+#app-loading-fallback a { color: var(--app-accent); text-decoration: underline; }
+
+/* Keep the supporting workspaces in the same compact editorial rhythm. */
+body :is(.radar-hero, .outline-hero, .review-hero) { padding: 24px; margin-bottom: 20px; }
+body :is(.radar-hero, .outline-hero, .review-hero) h1 { margin: 8px 0; font-size: clamp(26px, 3vw, 36px); }
+body :is(.radar-eyebrow, .outline-eyebrow, .review-eyebrow) { margin: 0; }
+body :is(.outline-error, .radar-error, .review-error) { overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+  .app-nav { gap: 6px; }
+  .app-link { min-height: 40px; padding: 8px 10px; }
+  body :is(.radar-hero, .outline-hero, .review-hero) { padding: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { .app-link { transition: none; } }
