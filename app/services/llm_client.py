@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from app.config import secret_value
 
 class LLMConfigurationError(ValueError):
     pass
@@ -21,7 +22,7 @@ def _validate_configuration(api_key: str, base_url: str, model: str, model_field
 
 
 def validate_worker_settings(settings: Any) -> None:
-    api_key = getattr(settings, "openai_api_key", "")
+    api_key = secret_value(getattr(settings, "openai_api_key", ""))
     base_url = getattr(settings, "openai_base_url", "")
     _validate_configuration(api_key, base_url, getattr(settings, "openai_model", ""), "OPENAI_MODEL")
     _validate_configuration(api_key, base_url, getattr(settings, "openai_review_model", ""), "OPENAI_REVIEW_MODEL")
@@ -92,7 +93,7 @@ class OpenAIResponsesLLMClient(LLMClient):
             else getattr(settings, "openai_model", "")
         )
         return cls(
-            api_key=getattr(settings, "openai_api_key", ""),
+            api_key=secret_value(getattr(settings, "openai_api_key", "")),
             model=model,
             base_url=getattr(settings, "openai_base_url", "https://api.openai.com"),
             reasoning_effort=getattr(settings, "openai_reasoning_effort", ""),

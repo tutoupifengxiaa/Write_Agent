@@ -8,11 +8,18 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 
 
+def secret_value(value: SecretStr | str | None) -> str:
+    if isinstance(value, SecretStr):
+        return value.get_secret_value()
+    return value or ""
+
+
 class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
+    access_token: SecretStr = SecretStr("")
     database_url: str = "sqlite+pysqlite:///:memory:"
-    openai_api_key: str = ""
+    openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = "https://api.openai.com"
     openai_model: str = "gpt-5.5"
     openai_review_model: str = "gpt-5.5"
@@ -30,7 +37,7 @@ class Settings(BaseSettings):
     fanqie_browser_mode: str = "stub"
     fanqie_author_url: str = ""
     fanqie_username: str = ""
-    fanqie_password: str = ""
+    fanqie_password: SecretStr = SecretStr("")
     fanqie_screenshot_dir: str = "logs"
     fanqie_storage_state_path: str | None = None
     fanqie_headless: bool = True

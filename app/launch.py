@@ -10,7 +10,7 @@ import webbrowser
 import uvicorn
 
 from app.application import build_worker, initialize_database
-from app.config import settings
+from app.config import secret_value, settings
 from app.orchestrator.scheduler_runner import DEFAULT_MAX_CONSECUTIVE_FAILURES, run_scheduler_loop
 from app.services.llm_client import LLMConfigurationError, validate_worker_settings
 
@@ -54,13 +54,18 @@ def _log_worker_event(event: str, **payload) -> None:
     logger.info(event, extra={key: payload[key] for key in WORKER_LOG_FIELDS if key in payload})
 
 
-def run_web(*, host: str = "127.0.0.1", port: int = 8000) -> None:
+def run_web(*, host: str = "127.0.0.1", port: int = 8000) -> int:
+    has_token = bool(secret_value(settings.access_token).strip())
+    if host.lower() not in {"127.0.0.1", "localhost", "::1"} and not has_token:
+        print("ACCESS_TOKEN is required when listening on a non-local address", file=sys.stderr)
+        return 1
     threading.Thread(
         target=open_creation_page,
         kwargs={"host": host, "port": port},
         daemon=True,
     ).start()
     uvicorn.run("app.main:app", host=host, port=port, reload=False)
+    return 0
 
 
 def run_worker(
@@ -149,8 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.setLevel(settings.log_level.upper())
     args = list(sys.argv[1:] if argv is None else argv)
     if not args:
-        run_web(host="127.0.0.1", port=8888)
-        return 0
+        return run_web(host="127.0.0.1", port=8888)
 
     parser = _build_parser()
     parsed = parser.parse_args(args)
@@ -160,8 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         initialize_database()
         return 0
     if mode == "web":
-        run_web(host=parsed.host, port=parsed.port)
-        return 0
+        return run_web(host=parsed.host, port=parsed.port)
     if mode == "worker":
         return run_worker(
             batch_limit=parsed.batch_limit,

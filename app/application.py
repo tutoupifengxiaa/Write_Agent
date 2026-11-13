@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path
+from secrets import compare_digest
 from typing import Any, Callable
+from urllib.parse import parse_qs
 
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import SecretStr
 from sqlalchemy.engine import Engine
@@ -26,6 +29,7 @@ from app.api.routes_creation import router as creation_router
 from app.api.routes_jobs import router as jobs_router
 from app.api.routes_review_center import router as review_center_router
 from app.api.routes_trends import router as trends_router
+from app.config import secret_value, settings as default_settings
 from app.db.base import SessionLocal, create_engine_from_settings, engine, make_session_factory, warn_if_memory_database
 from app.db.schema_migrations import upgrade_database
 from app.orchestrator.scheduler import Scheduler
@@ -180,11 +184,11 @@ def _embedding_options(settings: Any) -> dict:
     fallback_embedding_client = (
         KeywordEmbeddingClient() if fallback_mode == "keyword" else None
     )
-    embedding_api_key = _secret_value(
+    embedding_api_key = secret_value(
         getattr(settings, "embedding_api_key", "")
     ).strip()
     if not embedding_api_key:
-        embedding_api_key = _secret_value(
+        embedding_api_key = secret_value(
             getattr(settings, "openai_api_key", "")
         ).strip()
     embedding_base_url = str(
@@ -248,7 +252,10 @@ def build_web_app(settings: Any, *, worker: WriteAgentApplication | None = None)
                 resources.callback(worker.close)
             yield
 
-    app = create_fastapi_app(initialize_database=False, lifespan=lifespan, context_options={})
+    app = create_fastapi_app(
+        initialize_database=False, lifespan=lifespan, context_options={},
+        access_token=getattr(settings, "access_token", ""),
+    )
     if worker is not None:
         app.state.session_factory = worker.session_factory
         scheduler = worker.scheduler
@@ -270,10 +277,14 @@ def create_fastapi_app(
     direction_generator: Callable[[dict], dict] | None = None,
     outline_generator: Callable[[dict], dict] | None = None,
     context_options: dict | None = None,
+    access_token: SecretStr | str | None = None,
 ) -> FastAPI:
     if initialize_database:
         upgrade_database(engine)
     app = FastAPI(lifespan=lifespan)
+    token = secret_value(default_settings.access_token if access_token is None else access_token)
+    if token.strip():
+        _configure_access_control(app, sha256(token.encode()).hexdigest())
     app.state.session_factory = SessionLocal
     app.state.creation_writer = writer
     app.state.creation_stream_writer = stream_writer
@@ -305,7 +316,58 @@ def create_fastapi_app(
     return app
 
 
-def _secret_value(value: Any) -> str:
-    if isinstance(value, SecretStr):
-        return value.get_secret_value()
-    return str(value or "")
+def _configure_access_control(app: FastAPI, expected_digest: str) -> None:
+    cookie_name = "write_agent_token"
+
+    def matches_token(value: str) -> bool:
+        return compare_digest(sha256(value.encode()).hexdigest(), expected_digest)
+
+    @app.middleware("http")
+    async def check_access(request: Request, call_next):
+        path = request.url.path
+        if path == "/health" or path.startswith("/static/") or (
+            path == "/login" and request.method in {"GET", "POST"}
+        ):
+            return await call_next(request)
+        scheme, _, credential = request.headers.get("authorization", "").partition(" ")
+        if scheme.lower() == "bearer" and matches_token(credential):
+            return await call_next(request)
+        cookie = request.cookies.get(cookie_name, "")
+        if cookie.isascii() and compare_digest(cookie, expected_digest):
+            return await call_next(request)
+        if request.method == "GET" and "text/html" in request.headers.get("accept", "").lower():
+            return RedirectResponse("/login", status_code=303)
+        return JSONResponse({"detail": "未授权"}, status_code=401)
+
+    def login_page(*, failed: bool = False) -> HTMLResponse:
+        message = '<p role="alert">访问令牌错误</p>' if failed else ""
+        return HTMLResponse(
+            '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>登录</title>'
+            '<main><h1>登录</h1><form method="post" action="/login">'
+            '<label>访问令牌 <input name="token" type="password" required></label>'
+            f'<button type="submit">登录</button></form>{message}</main></html>',
+            status_code=401 if failed else 200,
+        )
+
+    @app.get("/login", include_in_schema=False)
+    async def show_login():
+        return login_page()
+
+    @app.post("/login", include_in_schema=False)
+    async def submit_login(request: Request):
+        media_type = request.headers.get("content-type", "").partition(";")[0].strip().lower()
+        if media_type != "application/x-www-form-urlencoded":
+            return login_page(failed=True)
+        try:
+            fields = parse_qs((await request.body()).decode("utf-8"), errors="strict")
+        except UnicodeDecodeError:
+            return login_page(failed=True)
+        values = fields.get("token", [])
+        if len(values) != 1 or not matches_token(values[0]):
+            return login_page(failed=True)
+        response = RedirectResponse("/ops", status_code=303)
+        response.set_cookie(
+            cookie_name, expected_digest, httponly=True, samesite="strict", path="/",
+            secure=request.url.scheme == "https",
+        )
+        return response

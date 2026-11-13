@@ -7,6 +7,7 @@ import re
 import httpx
 from pydantic import SecretStr
 
+from app.config import secret_value
 
 class EmbeddingClient(ABC):
     @abstractmethod
@@ -44,9 +45,7 @@ class OpenAICompatibleEmbeddingClient(EmbeddingClient):
         timeout_seconds: float = 30.0,
         http_client: httpx.Client | None = None,
     ) -> None:
-        api_key_value = (
-            api_key.get_secret_value() if isinstance(api_key, SecretStr) else api_key
-        ).strip()
+        api_key_value = secret_value(api_key).strip()
         normalized_base_url = base_url.strip().rstrip("/")
         normalized_model = model.strip()
 
@@ -78,7 +77,7 @@ class OpenAICompatibleEmbeddingClient(EmbeddingClient):
         response = self._client.post(
             f"{self.base_url}/embeddings",
             headers={
-                "Authorization": f"Bearer {self._api_key.get_secret_value()}"
+                "Authorization": f"Bearer {secret_value(self._api_key)}"
             },
             json={"model": self.model, "input": texts},
         )

@@ -19,6 +19,8 @@ python -m app.launch
 
 浏览器入口为 `http://127.0.0.1:8888/ops`。覆盖端口可使用 `python -m app.launch web --port 8001`。
 
+Web 默认仅监听本机。监听地址为 `127.0.0.1`、`localhost` 或 `::1` 时可不设访问令牌。监听其他地址时，必须先在 `.env` 中设置 `ACCESS_TOKEN=YOUR_TOKEN_HERE`。配置后，浏览器用户在 `/login` 输入令牌，API 客户端通过 `Authorization: Bearer YOUR_TOKEN_HERE` 请求头认证。
+
 当前按源码目录运行。项目尚未配置 flat-layout 包发现，Alembic 资源也在包外；`pip install -e .` 和 wheel 构建目前不可用，打包支持后续单独处理。
 
 运行 Worker：
