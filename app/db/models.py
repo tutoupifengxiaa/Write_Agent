@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -29,18 +29,25 @@ class Book(Base):
 
 class Chapter(Base):
     __tablename__ = "chapters"
+    __table_args__ = (Index("ix_chapters_status_next_attempt_at", "status", "next_attempt_at"),)
 
     id: Mapped[str] = mapped_column(
         String(64),
         primary_key=True,
         default=lambda: _new_id("chapter"),
     )
-    book_id: Mapped[str] = mapped_column(ForeignKey("books.id"), nullable=False)
+    book_id: Mapped[str] = mapped_column(ForeignKey("books.id"), nullable=False, index=True)
     chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     goal: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(64), nullable=False, default="draft_planned")
     current_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approved_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -56,7 +63,7 @@ class ChapterVersion(Base):
         primary_key=True,
         default=lambda: _new_id("chapter_version"),
     )
-    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), nullable=False)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(64), nullable=False, default="manual")
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -81,7 +88,8 @@ class ContinuityEvent(Base):
         primary_key=True,
         default=lambda: _new_id("evt"),
     )
-    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), nullable=False)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), nullable=False, index=True)
+    chapter_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, default="state_delta")
     delta: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -93,13 +101,20 @@ class ContinuityEvent(Base):
 
 class PublishJob(Base):
     __tablename__ = "publish_jobs"
+    __table_args__ = (Index("ix_publish_jobs_status_next_attempt_at", "status", "next_attempt_at"),)
 
     id: Mapped[str] = mapped_column(
         String(64),
         primary_key=True,
         default=lambda: _new_id("publish_job"),
     )
-    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), nullable=False)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), nullable=False, index=True)
+    chapter_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    chapter_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     platform: Mapped[str] = mapped_column(String(64), nullable=False)
     mode: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -121,7 +136,7 @@ class StoryArc(Base):
         primary_key=True,
         default=lambda: _new_id("story_arc"),
     )
-    book_id: Mapped[str] = mapped_column(ForeignKey("books.id"), nullable=False)
+    book_id: Mapped[str] = mapped_column(ForeignKey("books.id"), nullable=False, index=True)
     arc_type: Mapped[str] = mapped_column(String(64), nullable=False)
     chapter_start: Mapped[int] = mapped_column(Integer, nullable=False)
     chapter_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -137,7 +152,7 @@ class Character(Base):
         primary_key=True,
         default=lambda: _new_id("character"),
     )
-    book_id: Mapped[str] = mapped_column(ForeignKey("books.id"), nullable=False)
+    book_id: Mapped[str] = mapped_column(ForeignKey("books.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str | None] = mapped_column(String(128), nullable=True)
     age: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -153,8 +168,8 @@ class CharacterSnapshot(Base):
         primary_key=True,
         default=lambda: _new_id("character_snapshot"),
     )
-    character_id: Mapped[str] = mapped_column(ForeignKey("characters.id"), nullable=False)
-    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), nullable=False)
+    character_id: Mapped[str] = mapped_column(ForeignKey("characters.id"), nullable=False, index=True)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), nullable=False, index=True)
     state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -171,7 +186,7 @@ class MemoryEmbedding(Base):
         primary_key=True,
         default=lambda: _new_id("memory_embedding"),
     )
-    book_id: Mapped[str] = mapped_column(ForeignKey("books.id"), nullable=False)
+    book_id: Mapped[str] = mapped_column(ForeignKey("books.id"), nullable=False, index=True)
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     source_id: Mapped[str] = mapped_column(String(64), nullable=False)
     source_chapter_number: Mapped[int | None] = mapped_column(Integer, nullable=True)

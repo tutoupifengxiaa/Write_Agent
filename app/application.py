@@ -148,6 +148,12 @@ class WriteAgentApplication:
         )
         fastapi_app = create_fastapi_app(
             initialize_database=False,
+            context_options={
+                "embedding_client": embedding_client,
+                "embedding_model_name": embedding_model_name,
+                "fallback_embedding_client": fallback_embedding_client,
+                "embedding_fallback_mode": fallback_mode,
+            },
             writer=lambda context: write_chapter(writer_client, context),
             stream_writer=lambda context: stream_write_chapter(
                 writer_client,
@@ -183,6 +189,7 @@ def create_fastapi_app(
     stream_writer: Callable[[dict], Any] | None = None,
     direction_generator: Callable[[dict], dict] | None = None,
     outline_generator: Callable[[dict], dict] | None = None,
+    context_options: dict | None = None,
 ) -> FastAPI:
     if initialize_database:
         Base.metadata.create_all(bind=engine)
@@ -191,6 +198,9 @@ def create_fastapi_app(
     app.state.creation_stream_writer = stream_writer
     app.state.direction_generator = direction_generator
     app.state.outline_generator = outline_generator
+    app.state.creation_context_options = context_options or {
+        "fallback_embedding_client": KeywordEmbeddingClient(),
+    }
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.include_router(books_router)

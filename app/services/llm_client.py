@@ -41,6 +41,7 @@ class OpenAIResponsesLLMClient(LLMClient):
         self.fallback_model = fallback_model
         self.fallback_reasoning_effort = fallback_reasoning_effort
         self.store_response = store_response
+        self._stream_timeout = httpx.Timeout(connect=10, read=timeout_seconds, write=30, pool=10)
         self._client = http_client or httpx.Client(timeout=timeout_seconds)
         self._max_retries = 2
 
@@ -95,7 +96,7 @@ class OpenAIResponsesLLMClient(LLMClient):
                 reasoning_effort=reasoning_effort if reasoning_effort is not None else self.reasoning_effort,
                 stream=True,
             ),
-            timeout=None,
+            timeout=self._stream_timeout,
         ) as response:
             response.raise_for_status()
             for event in self._iter_sse_events(response):

@@ -10,6 +10,7 @@ ENV_FILE = PROJECT_ROOT / ".env"
 
 class Settings(BaseSettings):
     app_env: str = "development"
+    log_level: str = "INFO"
     database_url: str = "sqlite+pysqlite:///:memory:"
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com"
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
     fanqie_username: str = ""
     fanqie_password: str = ""
     fanqie_screenshot_dir: str = "logs"
+    fanqie_storage_state_path: str | None = None
     fanqie_headless: bool = True
     fanqie_slow_mo_ms: int = 0
     publish_mode: str = ""

@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.db.models import Chapter
+from app.db.models import Book, Chapter
 from app.db.repositories import MemoryRepository
 from app.services.embedding import EmbeddingClient
 from app.services.memory_index import retrieve_memory_evidence
@@ -31,6 +31,7 @@ def build_chapter_context_from_memory(
     fallback_embedding_client: EmbeddingClient | None = None,
     embedding_fallback_mode: str = "keyword",
     summary_limit: int = 3,
+    chapter_goal_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     chapter = session.scalar(select(Chapter).where(Chapter.id == chapter_id))
     if chapter is None:
@@ -44,7 +45,12 @@ def build_chapter_context_from_memory(
     )
     recent_summaries = memory_repo.list_recent_summaries(chapter_id)
     recent_summaries = recent_summaries[:summary_limit]
-    chapter_goal = chapter.goal or {}
+    book = session.get(Book, chapter.book_id)
+    chapter_goal = dict(chapter.goal or {})
+    chapter_goal["objective"] = chapter_goal.get("objective") or chapter_goal.get("chapter_goal") or ""
+    chapter_goal["style_rules"] = chapter_goal.get("style_rules") or (book.style_rules if book else None) or ""
+    chapter_goal.update(chapter_goal_overrides or {})
+    chapter_title = chapter.title
     retrieval = retrieve_memory_evidence(
         session=session,
         book_id=chapter.book_id,
@@ -76,6 +82,7 @@ def build_chapter_context_from_memory(
         chapter_goal=chapter_goal,
     )
     context["retrieval_evidence"] = retrieval["items"]
+    context["chapter_title"] = chapter_title
     context["retrieval_mode"] = retrieval["mode"]
     context["retrieval_degradation_reason"] = retrieval["degradation_reason"]
     return context

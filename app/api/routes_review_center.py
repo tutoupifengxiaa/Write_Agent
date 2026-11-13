@@ -5,12 +5,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.agents.persister import persist_approved_chapter
 from app.api.dependencies import get_session
-from app.db.models import ChapterVersion
+from app.db.models import Chapter, ChapterVersion
 from app.db.repositories import ChapterRepository
 from app.ui.review_center_page import render_review_center_page
 
@@ -20,6 +20,7 @@ router = APIRouter()
 
 class ReviewCenterApproveRequest(BaseModel):
     chapter_id: str
+    version_id: str | None = None
     note: str = ""
     create_publish_job: bool = False
 
@@ -56,6 +57,19 @@ def approve_manual_review_chapter(
     )
     if latest_version is None or not latest_version.content:
         raise HTTPException(status_code=400, detail="chapter has no saved draft")
+    if payload.version_id != latest_version.id:
+        raise HTTPException(status_code=409, detail="审核版本已变化或未指定，请刷新后重新审核")
+
+    claimed = session.execute(
+        update(Chapter).where(
+            Chapter.id == payload.chapter_id,
+            Chapter.current_version_id == payload.version_id,
+            Chapter.status.in_(("review_pending", "revision_pending")),
+        ).values(status="approved")
+    )
+    if claimed.rowcount != 1:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="审核版本已变化，请刷新后重新审核")
 
     repo.update_goal_fields(
         payload.chapter_id,

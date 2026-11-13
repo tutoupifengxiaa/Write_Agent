@@ -51,6 +51,7 @@
     const labels = {
       planned: "已规划", draft_planned: "待写作", context_ready: "上下文就绪", persisted: "已保存", processed: "已处理", attention_required: "需要处理", busy: "忙碌", draft_uploaded: "草稿已上传", pending: "待处理", draft: "草稿", writing: "写作中", generating: "生成中",
       running: "运行中", queued: "排队中", review_pending: "待审核", revision_pending: "待修订",
+      draft_saved: "草稿已保存", generation_failed: "生成失败", superseded: "已有更新版本",
       approved: "已通过", completed: "已完成", succeeded: "已成功", success: "成功",
       publish_pending: "待发布", publishing: "发布中", published: "已发布", published_draft: "已存平台草稿",
       failed: "失败", publish_failed: "发布失败", archived: "已归档", cancelled: "已取消",

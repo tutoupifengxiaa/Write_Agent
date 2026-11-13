@@ -21,7 +21,7 @@ def plan_next_chapter(
             character_state_hints.append(f"{name}:{mood}")
 
     return {
-        "chapter_goal": chapter_goal,
+        "objective": chapter_goal,
         "must_include": must_include,
         "must_avoid": must_avoid,
         "target_words": target_words,

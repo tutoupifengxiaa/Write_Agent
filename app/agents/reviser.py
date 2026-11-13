@@ -15,7 +15,7 @@ def render_reviser_prompt(original_content: str, revision_instructions: dict) ->
         ],
         "output_schema": {
             "revised_content": "full revised chapter text",
-            "summary": "short summary of revision changes",
+            "summary": "short plot summary of the revised chapter, not revision commentary",
             "resolved_issue_ids": ["issue identifier repaired by this revision"],
             "unresolved_issue_ids": ["issue identifier still unresolved"],
             "change_summary": [

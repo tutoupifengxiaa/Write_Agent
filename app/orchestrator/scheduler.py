@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from datetime import timedelta
+
+from sqlalchemy import select, update
 
 from app.db.models import Chapter, ChapterVersion, PublishJob
 from app.orchestrator.chapter_workflow import ChapterWorkflow
-from app.orchestrator.retry_policy import PLATFORM_ERROR, classify_error
+from app.orchestrator.retry_policy import classify_error, max_retries
+from app.orchestrator.task_claims import claim_task, ready_task, utc_now
 from app.orchestrator.state_machine import (
     DRAFT_PLANNED,
     DRAFT_UPLOADED,
@@ -58,18 +61,32 @@ class Scheduler:
         excluded_publish_job_ids: set[str] | None = None,
         excluded_chapter_ids: set[str] | None = None,
     ) -> dict:
-        publish_statement = select(PublishJob).where(
-            PublishJob.status == PUBLISH_PENDING
-        )
+        now = utc_now()
+        self.session.execute(update(Chapter).where(
+            Chapter.status == DRAFT_PLANNED,
+            Chapter.claim_token.is_not(None), Chapter.lease_expires_at <= now,
+            Chapter.attempt_count >= 3,
+        ).values(status="generation_failed", claim_token=None, lease_expires_at=None,
+                 error_message="generation attempts exhausted after worker interruption")
+            .execution_options(synchronize_session="fetch"))
+        # An expired upload may already have succeeded remotely. Require human
+        # reconciliation instead of blindly replaying an external side effect.
+        self.session.execute(update(PublishJob).where(
+            PublishJob.status == "publishing", PublishJob.lease_expires_at <= now,
+        ).values(status=PUBLISH_FAILED, claim_token=None, lease_expires_at=None,
+                 error_message="publication outcome unknown; verify platform before retry")
+            .execution_options(synchronize_session="fetch"))
+        self.session.commit()
+        publish_statement = select(PublishJob).where(ready_task(PublishJob, PUBLISH_PENDING, now))
         if excluded_publish_job_ids:
             publish_statement = publish_statement.where(
                 PublishJob.id.not_in(excluded_publish_job_ids)
             )
-        publish_job = self.session.scalar(publish_statement.order_by(PublishJob.id.asc()))
+        publish_job = self.session.scalar(publish_statement.order_by(PublishJob.created_at.asc(), PublishJob.id.asc())) if self.publisher is not None else None
         if publish_job is not None:
             return self.run_publish_job(publish_job.id)
 
-        chapter_statement = select(Chapter).where(Chapter.status == DRAFT_PLANNED)
+        chapter_statement = select(Chapter).where(ready_task(Chapter, DRAFT_PLANNED, now))
         if excluded_chapter_ids:
             chapter_statement = chapter_statement.where(
                 Chapter.id.not_in(excluded_chapter_ids)
@@ -78,8 +95,19 @@ class Scheduler:
             chapter_statement.order_by(Chapter.chapter_number.asc())
         )
         if chapter is None:
+            self.session.rollback()
             return {"final_status": "idle"}
-        return self.run_once(chapter.id)
+        chapter_id = chapter.id
+        try:
+            return self.run_once(chapter_id)
+        except Exception as exc:
+            self.session.rollback()
+            chapter = self.session.get(Chapter, chapter_id)
+            return {
+                "final_status": chapter.status if chapter else "generation_failed",
+                "item_type": "chapter", "item_id": chapter_id,
+                "error_type": classify_error(exc),
+            }
 
     def run_pending_batch(self, *, limit: int = 10) -> list[dict]:
         results: list[dict] = []
@@ -106,82 +134,49 @@ class Scheduler:
         if self.publisher is None:
             raise ValueError("publisher is not configured")
 
-        publish_job = self.session.scalar(
-            select(PublishJob).where(PublishJob.id == publish_job_id)
-        )
+        publish_job = self.session.get(PublishJob, publish_job_id)
         if publish_job is None:
             raise ValueError(f"Publish job not found: {publish_job_id}")
 
-        chapter = self.session.scalar(
-            select(Chapter).where(Chapter.id == publish_job.chapter_id)
-        )
-        if chapter is None:
-            raise ValueError(f"Chapter not found for publish job: {publish_job_id}")
-
-        latest_version = self.session.scalar(
+        token = claim_task(self.session, PublishJob, publish_job_id, PUBLISH_PENDING, running_status="publishing")
+        if token is None:
+            return {"final_status": "skipped", "item_type": "publish_job", "item_id": publish_job_id}
+        self.session.refresh(publish_job)
+        attempts = publish_job.attempt_count
+        title = publish_job.chapter_title
+        version = self.session.scalar(
             select(ChapterVersion)
-            .where(ChapterVersion.id == chapter.current_version_id)
-            .where(ChapterVersion.chapter_id == chapter.id)
+            .where(ChapterVersion.id == publish_job.chapter_version_id)
+            .where(ChapterVersion.chapter_id == publish_job.chapter_id)
+            .where(ChapterVersion.source == "approved")
         )
-        if (
-            latest_version is None
-            or not isinstance(latest_version.content, str)
-            or not latest_version.content.strip()
-        ):
-            publish_job.status = PUBLISH_FAILED
-            publish_job.error_message = (
-                "chapter version is missing, belongs to another chapter, or has empty content"
-            )
-            self.session.commit()
-            return {
-                "final_status": PUBLISH_FAILED,
-                "item_type": "publish_job",
-                "item_id": publish_job_id,
-                "error_type": "business_error",
-            }
-
+        content = version.content if version is not None else None
+        self.session.rollback()
+        if not title or not isinstance(content, str) or not content.strip():
+            return self._finish_publish(publish_job_id, token, PUBLISH_FAILED,
+                error_type="business_error", error_message="job has no valid bound approved version/title; review and create a new job")
         try:
-            result = self.publisher(chapter.title, latest_version.content)
+            result = self.publisher(title, content)
         except Exception as exc:
-            error_type = classify_error(str(exc))
-            publish_job.error_message = str(exc)
-            if error_type == PLATFORM_ERROR:
-                publish_job.status = PUBLISH_PENDING
-                self.session.commit()
-                return {
-                    "final_status": PUBLISH_PENDING,
-                    "item_type": "publish_job",
-                    "item_id": publish_job_id,
-                    "error_type": error_type,
-                }
-            publish_job.status = PUBLISH_FAILED
-            publish_job.error_message = str(exc)
-            self.session.commit()
-            return {
-                "final_status": PUBLISH_FAILED,
-                "item_type": "publish_job",
-                "item_id": publish_job_id,
-                "error_type": error_type,
-            }
+            error_type = classify_error(exc)
+            retry = attempts <= max_retries(error_type)
+            return self._finish_publish(publish_job_id, token, PUBLISH_PENDING if retry else PUBLISH_FAILED,
+                error_type=error_type, error_message=f"{type(exc).__name__}: {error_type}",
+                next_attempt_at=utc_now() + timedelta(seconds=5 * 2 ** min(attempts - 1, 8)) if retry else None)
+        if not isinstance(result, dict) or not result.get("success"):
+            return self._finish_publish(publish_job_id, token, PUBLISH_FAILED,
+                error_type="business_error", error_message="publish failed")
+        return self._finish_publish(publish_job_id, token, DRAFT_UPLOADED,
+            platform_draft_id=result.get("platform_draft_id"), screenshot_path=result.get("screenshot_path"))
 
-        if not result.get("success"):
-            publish_job.status = PUBLISH_FAILED
-            publish_job.error_message = result.get("error_message") or "publish failed"
-            self.session.commit()
-            return {
-                "final_status": PUBLISH_FAILED,
-                "item_type": "publish_job",
-                "item_id": publish_job_id,
-                "error_type": "business_error",
-            }
-
-        publish_job.status = DRAFT_UPLOADED
-        publish_job.platform_draft_id = result.get("platform_draft_id")
-        publish_job.screenshot_path = result.get("screenshot_path")
-        publish_job.error_message = None
+    def _finish_publish(self, job_id, token, status, *, error_type=None, **values):
+        result = self.session.execute(update(PublishJob).where(
+            PublishJob.id == job_id, PublishJob.claim_token == token,
+            PublishJob.status == "publishing",
+        ).values(status=status, claim_token=None, lease_expires_at=None, **values))
         self.session.commit()
-        return {
-            "final_status": DRAFT_UPLOADED,
-            "item_type": "publish_job",
-            "item_id": publish_job_id,
-        }
+        outcome = {"final_status": status if result.rowcount == 1 else "superseded",
+                   "item_type": "publish_job", "item_id": job_id}
+        if error_type:
+            outcome["error_type"] = error_type
+        return outcome

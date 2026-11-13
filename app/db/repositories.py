@@ -217,6 +217,8 @@ class PublishJobRepository:
         platform: str,
         mode: str,
         status: str,
+        chapter_version_id: str | None = None,
+        chapter_title: str | None = None,
         platform_draft_id: str | None = None,
         error_message: str | None = None,
         screenshot_path: str | None = None,
@@ -226,6 +228,8 @@ class PublishJobRepository:
             platform=platform,
             mode=mode,
             status=status,
+            chapter_version_id=chapter_version_id,
+            chapter_title=chapter_title,
             platform_draft_id=platform_draft_id,
             error_message=error_message,
             screenshot_path=screenshot_path,
@@ -365,9 +369,13 @@ class MemoryRepository:
             select(ChapterVersion.summary)
             .join(Chapter, Chapter.id == ChapterVersion.chapter_id)
             .where(Chapter.book_id == chapter.book_id)
-            .where(Chapter.chapter_number <= chapter.chapter_number)
+            .where(Chapter.chapter_number < chapter.chapter_number)
+            .where(ChapterVersion.id == Chapter.approved_version_id)
+            .where(ChapterVersion.source == "approved")
             .where(ChapterVersion.summary.is_not(None))
             .order_by(Chapter.chapter_number.desc(), ChapterVersion.created_at.desc())
+            .where(ChapterVersion.summary != "")
+            .limit(limit)
         )
         summaries = [summary for summary in self.session.scalars(statement) if summary]
         return summaries[:limit]
@@ -518,10 +526,15 @@ class SchedulerRunRepository:
         )
         return dict(self.session.execute(statement).mappings().one())
 
-    def get_failure_clusters(self) -> list[dict[str, int | str]]:
+    def get_failure_clusters(self, *, limit: int = 500) -> list[dict[str, int | str]]:
+        if limit < 0:
+            raise ValueError("limit must be non-negative")
+        recent_runs = select(SchedulerRun).order_by(
+            SchedulerRun.created_at.desc(), SchedulerRun.cycle_number.desc(), SchedulerRun.id.desc()
+        ).limit(limit)
         clusters: dict[str, dict[str, int | str]] = {}
 
-        for run in self.list_runs():
+        for run in self.session.scalars(recent_runs):
             for outcome in run.outcomes:
                 final_status = outcome.get("final_status") or "unknown"
                 item_type = outcome.get("item_type") or "item"
@@ -539,19 +552,15 @@ class SchedulerRunRepository:
                         "error_type": error_type,
                         "count": 1,
                         "latest_cycle_number": run.cycle_number,
+                        "latest_at": run.created_at.isoformat(),
                         "sample_item_id": outcome.get("item_id") or "unknown",
                     }
                     continue
 
                 existing["count"] = int(existing["count"]) + 1
-                if run.cycle_number >= int(existing["latest_cycle_number"]):
-                    existing["latest_cycle_number"] = run.cycle_number
-                    existing["sample_item_id"] = outcome.get("item_id") or "unknown"
 
-        return sorted(
-            clusters.values(),
-            key=lambda item: (-int(item["count"]), -int(item["latest_cycle_number"])),
-        )
+        # Stable sorting preserves newest-first order for equally frequent clusters.
+        return sorted(clusters.values(), key=lambda item: int(item["count"]), reverse=True)
 
 
 class TrendSnapshotRepository:

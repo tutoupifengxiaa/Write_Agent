@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from typing import Annotated
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.agents.planner import plan_next_chapter
 from app.api.dependencies import get_session
-from app.db.models import ChapterVersion
+from app.db.models import ChapterVersion, PublishJob
 from app.db.repositories import BookRepository, ChapterRepository, PublishJobRepository
 from app.ui.chapter_detail_page import render_chapter_detail_page
 
@@ -20,6 +20,7 @@ ChapterTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_lengt
 
 class ChapterGateRequest(BaseModel):
     action: str
+    version_id: str | None = None
 
 
 class ChapterCreateRequest(BaseModel):
@@ -335,7 +336,7 @@ def gate_chapter(
     )
 
     if payload.action == "approve":
-        result = approve_manual_review_chapter(ReviewCenterApproveRequest(chapter_id=chapter_id), session)
+        result = approve_manual_review_chapter(ReviewCenterApproveRequest(chapter_id=chapter_id, version_id=payload.version_id), session)
     elif payload.action == "revise":
         result = return_chapter_to_revision_pending(ReviewCenterReviseRequest(chapter_id=chapter_id), session)
     else:
@@ -352,7 +353,17 @@ def retry_publish(
     job = repo.get_latest_for_chapter(chapter_id)
     if job is None:
         raise HTTPException(status_code=404, detail="publish job not found")
-    repo.update_status(job, status="publish_pending", error_message=None)
+    version = session.get(ChapterVersion, job.chapter_version_id) if job.chapter_version_id else None
+    if version is None or version.chapter_id != chapter_id or version.source != "approved" or not job.chapter_title:
+        raise HTTPException(status_code=409, detail="发布任务未绑定有效审核版本，请重新审核并创建任务")
+    result = session.execute(update(PublishJob).where(
+        PublishJob.id == job.id, PublishJob.status == "publish_failed",
+        PublishJob.claim_token.is_(None),
+    ).values(status="publish_pending", error_message=None, attempt_count=0,
+             next_attempt_at=None, lease_expires_at=None))
+    if result.rowcount != 1:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="只有失败且未执行中的发布任务可以重试")
     session.commit()
     return {"chapter_id": chapter_id, "job_id": job.id, "status": job.status}
 
@@ -366,6 +377,12 @@ def archive_publish_failure(
     job = repo.get_latest_for_chapter(chapter_id)
     if job is None:
         raise HTTPException(status_code=404, detail="publish job not found")
-    repo.update_status(job, status="archived", error_message=job.error_message)
+    result = session.execute(update(PublishJob).where(
+        PublishJob.id == job.id, PublishJob.status == "publish_failed",
+        PublishJob.claim_token.is_(None),
+    ).values(status="archived"))
+    if result.rowcount != 1:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="只有失败且未执行中的发布任务可以归档")
     session.commit()
     return {"chapter_id": chapter_id, "job_id": job.id, "status": job.status}

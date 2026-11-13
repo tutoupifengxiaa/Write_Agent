@@ -56,7 +56,7 @@
         const rules = goal.style_rules || book.style_rules || "";
         setChapter(detail);
         setBookTitle(book.title);
-        setForm({chapterTitle: detail.title || "", chapterGoal: goal.objective || "",
+        setForm({chapterTitle: detail.title || "", chapterGoal: goal.objective || goal.chapter_goal || "",
           mustInclude: normalizeLines(goal.must_include), mustAvoid: normalizeLines(goal.must_avoid),
           styleRules: typeof rules === "object" ? Object.entries(rules).map(([key, value]) => key + ": " + value).join("\n") : rules,
           targetWords: goal.target_words || 2500});
@@ -113,7 +113,6 @@
         });
         setSavedSnapshot(snapshot(form.chapterTitle, draft, summary));
         setChapter(current => ({...current, title: form.chapterTitle, status: payload.status}));
-        if (!reviewAction) setStateDeltas([]);
         notify(reviewAction ? "已保存当前正文并提交审核" : payload.publish_job_id ? "已保存并加入草稿发布队列" : "已保存入库");
         try { await refreshVersions(); }
         catch (error) { notify("正文已保存，版本列表刷新失败：" + error.message, true); }
@@ -158,7 +157,7 @@
       try {
         const response = await fetch("/api/creation/generate-stream", {
           method: "POST", headers: {"Content-Type": "application/json"}, signal: controller.signal,
-          body: JSON.stringify({chapter_title: form.chapterTitle, chapter_goal: form.chapterGoal,
+          body: JSON.stringify({chapter_id: chapter?.id || null, chapter_title: form.chapterTitle, chapter_goal: form.chapterGoal,
             must_include: form.mustInclude, must_avoid: form.mustAvoid, style_rules: form.styleRules, target_words: Number(form.targetWords)})
         });
         if (!response.ok) {
@@ -249,8 +248,8 @@
               stateDeltas.length ? stateDeltas.map((item, index) => h("p", {key: index}, item.change || JSON.stringify(item))) : h("p", null, "暂无待审核状态变化")),
             h("button", {className: "secondary", disabled: !canPersist, onClick: () => persist("revision_pending")}, "保存并标记待修订"),
             h("a", {href: "/review-center"}, "前往人工审核台")),
-          h("details", {className: "panel"}, h("summary", null, "草稿发布"), h("p", null, "保存当前正文并加入番茄草稿队列，发布进度可在文章管理查看。"),
-            h("button", {className: "secondary", disabled: !canPersist, onClick: () => persist(null, true)}, "推送番茄草稿")))),
+          h("details", {className: "panel"}, h("summary", null, "草稿发布"), h("p", null, "提交当前正文到人工审核台，审核通过后可推送番茄草稿。"),
+            h("button", {className: "secondary", disabled: !canPersist, onClick: () => persist("review_pending")}, "保存并提交审核后发布")))),
       h("footer", {className: "actions", "aria-label": "章节操作"},
         busy === "generate" ? h("button", {id: "stop-generation-button", className: "secondary", onClick: () => controllerRef.current?.abort()}, "停止生成") :
           h("button", {id: "generate-chapter-button", className: "secondary", disabled: !!busy || loading, onClick: handleGenerate}, "生成章节"),

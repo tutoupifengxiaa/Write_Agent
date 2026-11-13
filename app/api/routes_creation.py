@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
-from app.agents.persister import persist_approved_chapter, persist_review_candidate
+from app.agents.persister import persist_draft_chapter, persist_review_candidate
+from app.agents.context_builder import build_chapter_context_from_memory
 from app.db.repositories import ChapterRepository
 from app.api.dependencies import get_session
 from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ DraftTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=
 
 
 class CreationGenerateRequest(BaseModel):
+    chapter_id: str | None = None
     chapter_title: str
     chapter_goal: str
     must_include: str = ""
@@ -79,15 +81,15 @@ def save_chapter_draft(
     payload: CreationSaveRequest,
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
+    if payload.create_publish_job:
+        raise HTTPException(status_code=409, detail="请先提交审核，批准后创建发布任务")
     try:
-        result = persist_approved_chapter(
+        result = persist_draft_chapter(
             session=session,
             chapter_id=payload.chapter_id,
             content=payload.content,
             summary=payload.summary,
-            review_score=payload.review_score,
             state_deltas=payload.state_deltas,
-            create_publish_job=payload.create_publish_job,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -99,7 +101,7 @@ def save_chapter_draft(
         "chapter_id": payload.chapter_id,
         "chapter_version_id": result["chapter_version_id"],
         "publish_job_id": result["publish_job_id"],
-        "status": "persisted",
+        "status": "draft_saved",
     }
 
 
@@ -147,13 +149,14 @@ def mark_chapter_for_manual_review(
 def generate_chapter(
     payload: CreationGenerateRequest,
     request: Request,
+    session: Session = Depends(get_session),
 ) -> CreationGenerateResponse:
     writer = getattr(request.app.state, "creation_writer", None)
     if writer is None:
         raise HTTPException(status_code=503, detail="creation writer is not configured")
 
     try:
-        result = writer(_build_writer_context(payload))
+        result = writer(_build_writer_context(payload, session=session, request=request))
     except ValueError as exc:
         if str(exc) == "OPENAI_API_KEY is required":
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -187,6 +190,7 @@ def generate_chapter(
 def generate_chapter_stream(
     payload: CreationGenerateRequest,
     request: Request,
+    session: Session = Depends(get_session),
 ) -> StreamingResponse:
     writer = getattr(request.app.state, "creation_writer", None)
     stream_writer = getattr(request.app.state, "creation_stream_writer", None)
@@ -197,7 +201,7 @@ def generate_chapter_stream(
         _stream_chapter_events(
             writer=writer,
             stream_writer=stream_writer,
-            context=_build_writer_context(payload),
+            context=_build_writer_context(payload, session=session, request=request),
             fallback_title=payload.chapter_title,
         ),
         media_type="text/event-stream",
@@ -209,8 +213,8 @@ def generate_chapter_stream(
     )
 
 
-def _build_writer_context(payload: CreationGenerateRequest) -> dict:
-    return {
+def _build_writer_context(payload: CreationGenerateRequest, *, session=None, request=None) -> dict:
+    context = {
         "chapter_title": payload.chapter_title,
         "chapter_goal": {
             "objective": payload.chapter_goal,
@@ -223,6 +227,21 @@ def _build_writer_context(payload: CreationGenerateRequest) -> dict:
         "character_states": [],
         "recent_summaries": [],
     }
+    if payload.chapter_id is not None:
+        if session is None or ChapterRepository(session).get_chapter(payload.chapter_id) is None:
+            raise HTTPException(status_code=404, detail="chapter not found")
+        overrides = dict(context["chapter_goal"])
+        if "style_rules" not in payload.model_fields_set:
+            overrides.pop("style_rules")
+        options = getattr(request.app.state, "creation_context_options", {}) if request else {}
+        context = build_chapter_context_from_memory(
+            session=session, chapter_id=payload.chapter_id,
+            chapter_goal_overrides=overrides, **options,
+        )
+        context["chapter_title"] = payload.chapter_title
+        # Index changes must not hold a write lock while the model is running.
+        session.commit()
+    return context
 
 
 def _split_lines(value: str) -> list[str]:

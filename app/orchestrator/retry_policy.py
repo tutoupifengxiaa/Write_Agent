@@ -1,3 +1,6 @@
+import httpx
+
+
 TRANSIENT_ERROR = "transient_error"
 BUSINESS_ERROR = "business_error"
 PLATFORM_ERROR = "platform_error"
@@ -9,7 +12,12 @@ ERROR_RETRY_LIMITS = {
 }
 
 
-def classify_error(error_code: str) -> str:
+def classify_error(error_code: str | Exception) -> str:
+    if isinstance(error_code, (httpx.TimeoutException, httpx.NetworkError)):
+        return TRANSIENT_ERROR
+    if isinstance(error_code, httpx.HTTPStatusError):
+        return TRANSIENT_ERROR if error_code.response.status_code in {429, 500, 502, 503, 504} else BUSINESS_ERROR
+    error_code = str(error_code).lower()
     if error_code.startswith("timeout") or error_code.startswith("network"):
         return TRANSIENT_ERROR
     if error_code.startswith("platform"):

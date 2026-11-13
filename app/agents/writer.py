@@ -32,7 +32,7 @@ def render_writer_prompt(context: dict) -> str:
         },
         "context": {
             "chapter_title": context.get("chapter_title", ""),
-            "objective": chapter_goal.get("objective", ""),
+            "objective": chapter_goal.get("objective") or chapter_goal.get("chapter_goal", ""),
             "must_include": chapter_goal.get("must_include", []),
             "must_avoid": chapter_goal.get("must_avoid", []),
             "style_rules": chapter_goal.get("style_rules", ""),
@@ -40,6 +40,7 @@ def render_writer_prompt(context: dict) -> str:
             "world_state": context.get("world_state", {}),
             "character_states": context.get("character_states", []),
             "recent_summaries": context.get("recent_summaries", []),
+            "retrieval_evidence": context.get("retrieval_evidence", []),
         },
         "quality_bar": [
             "plot continuity",

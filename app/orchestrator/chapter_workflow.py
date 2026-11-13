@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from typing import Literal, TypedDict
+from datetime import timedelta
 
 from langgraph.graph import END, START, StateGraph
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.agents.context_builder import build_chapter_context_from_memory
 from app.agents.persister import persist_approved_chapter, persist_review_candidate
 from app.db.models import Chapter
+from app.orchestrator.retry_policy import classify_error, max_retries
+from app.orchestrator.task_claims import LEASE_SECONDS, claim_task, utc_now
 from app.orchestrator.state_machine import (
     APPROVED,
     CONTEXT_READY,
@@ -33,6 +36,14 @@ class ChapterWorkflowState(TypedDict, total=False):
     final_status: str
     item_type: str
     item_id: str
+    claim_token: str
+    base_version_id: str | None
+    base_title: str
+    base_goal: dict
+
+
+class StaleGenerationError(Exception):
+    pass
 
 
 class ChapterWorkflow:
@@ -62,13 +73,35 @@ class ChapterWorkflow:
         self.graph = self._compile_graph()
 
     def invoke(self, chapter_id: str) -> dict:
+        chapter = self._get_chapter(chapter_id)
+        self.state_machine.transition(chapter.status, CONTEXT_READY)
+        token = claim_task(self.session, Chapter, chapter_id, "draft_planned")
+        if token is None:
+            return {"final_status": "skipped", "item_type": "chapter", "item_id": chapter_id}
         try:
-            result = self.graph.invoke({"chapter_id": chapter_id})
-        except Exception:
-            try:
-                self.session.rollback()
-            except Exception:
-                pass
+            result = self.graph.invoke({"chapter_id": chapter_id, "claim_token": token})
+        except StaleGenerationError:
+            self.session.rollback()
+            self.session.execute(update(Chapter).where(
+                Chapter.id == chapter_id, Chapter.claim_token == token,
+            ).values(claim_token=None, lease_expires_at=None))
+            self.session.commit()
+            return {"final_status": "superseded", "item_type": "chapter", "item_id": chapter_id}
+        except Exception as exc:
+            self.session.rollback()
+            chapter = self._get_chapter(chapter_id)
+            error_type = classify_error(exc)
+            retry = chapter.attempt_count <= max_retries(error_type)
+            self.session.execute(update(Chapter).where(
+                Chapter.id == chapter_id, Chapter.claim_token == token,
+                Chapter.status == "draft_planned",
+            ).values(
+                status="draft_planned" if retry else "generation_failed",
+                next_attempt_at=utc_now() + timedelta(seconds=5 * 2 ** min(chapter.attempt_count - 1, 8)) if retry else None,
+                error_message=f"{type(exc).__name__}: {error_type}",
+                claim_token=None, lease_expires_at=None,
+            ))
+            self.session.commit()
             raise
         return {
             "final_status": result["final_status"],
@@ -114,6 +147,7 @@ class ChapterWorkflow:
 
     def _build_context(self, state: ChapterWorkflowState) -> ChapterWorkflowState:
         chapter = self._get_chapter(state["chapter_id"])
+        base_version_id, base_title, base_goal = chapter.current_version_id, chapter.title, dict(chapter.goal or {})
         workflow_status = self.state_machine.transition(
             chapter.status, CONTEXT_READY
         )
@@ -125,15 +159,37 @@ class ChapterWorkflow:
             fallback_embedding_client=self.fallback_embedding_client,
             embedding_fallback_mode=self.embedding_fallback_mode,
         )
-        return {"workflow_status": workflow_status, "context": context}
+        self.session.commit()
+        return {"workflow_status": workflow_status, "context": context,
+                "base_version_id": base_version_id, "base_title": base_title, "base_goal": base_goal}
+
+    def _lock_current_result(self, state: ChapterWorkflowState) -> Chapter:
+        chapter = self._get_chapter(state["chapter_id"])
+        if dict(chapter.goal or {}) != state["base_goal"]:
+            raise StaleGenerationError("chapter goal changed during generation")
+        result = self.session.execute(update(Chapter).where(
+            Chapter.id == state["chapter_id"],
+            Chapter.claim_token == state["claim_token"],
+            Chapter.status == "draft_planned",
+            Chapter.current_version_id == state["base_version_id"],
+            Chapter.title == state["base_title"],
+        ).values(lease_expires_at=utc_now() + timedelta(seconds=LEASE_SECONDS)))
+        if result.rowcount != 1:
+            raise StaleGenerationError("chapter changed or task ownership expired")
+        return chapter
+
+    def _prepare_model_call(self, state: ChapterWorkflowState) -> None:
+        self._lock_current_result(state)
+        self.session.commit()
 
     def _write(self, state: ChapterWorkflowState) -> ChapterWorkflowState:
         workflow_status = self.state_machine.transition(
             state["workflow_status"], WRITING
         )
+        self._prepare_model_call(state)
         draft = self.writer(state["context"])
         content = draft.get("content")
-        if content is None:
+        if not isinstance(content, str) or not content.strip():
             raise ValueError("writer output missing required field: content")
         return {
             "workflow_status": workflow_status,
@@ -145,6 +201,7 @@ class ChapterWorkflow:
         workflow_status = self.state_machine.transition(
             state["workflow_status"], REVIEW_PENDING
         )
+        self._prepare_model_call(state)
         review = self.reviewer(state["content"], state["context"])
         self._extract_review_decision(review)
         return {
@@ -158,6 +215,7 @@ class ChapterWorkflow:
             state["workflow_status"], REVISION_PENDING
         )
         initial_review = state["initial_review"]
+        self._prepare_model_call(state)
         reviser_result = self.reviser(
             state["content"],
             {
@@ -214,6 +272,7 @@ class ChapterWorkflow:
             state["workflow_status"], REVIEW_PENDING
         )
         revision = state["revision"]
+        self._prepare_model_call(state)
         final_review = self.reviewer(
             revision["revised_content"], state["context"]
         )
@@ -231,7 +290,7 @@ class ChapterWorkflow:
     def _persist_approved(
         self, state: ChapterWorkflowState
     ) -> ChapterWorkflowState:
-        chapter = self._get_chapter(state["chapter_id"])
+        chapter = self._lock_current_result(state)
         self.state_machine.transition(state["workflow_status"], APPROVED)
         final_review = state["final_review"]
         _, review_score, review_summary, review_state_deltas = (
@@ -258,10 +317,8 @@ class ChapterWorkflow:
             chapter_id=chapter.id,
             content=revised_content if is_revised else state["content"],
             summary=(
-                review_summary
-                or (revision.get("summary") if is_revised else "")
-                or draft.get("summary")
-                or ""
+                (revision.get("summary") or "") if is_revised
+                else draft.get("summary") or ""
             ),
             review_score=review_score,
             state_deltas=(
@@ -274,6 +331,8 @@ class ChapterWorkflow:
             ),
             create_publish_job=self.create_publish_job,
         )
+        chapter.claim_token = None
+        chapter.lease_expires_at = None
         self.session.commit()
         return {
             "final_status": PERSISTED,
@@ -284,7 +343,7 @@ class ChapterWorkflow:
     def _persist_candidate(
         self, state: ChapterWorkflowState
     ) -> ChapterWorkflowState:
-        chapter = self._get_chapter(state["chapter_id"])
+        chapter = self._lock_current_result(state)
         if state["workflow_status"] != REVISION_PENDING:
             self.state_machine.transition(
                 state["workflow_status"], REVISION_PENDING
@@ -315,16 +374,17 @@ class ChapterWorkflow:
             chapter_id=chapter.id,
             content=revised_content if has_revised_content else state["content"],
             summary=(
-                review_summary
-                or (revision_data.get("summary") if has_revised_content else "")
-                or state["draft"].get("summary")
-                or ""
+                (revision_data.get("summary") or "") if has_revised_content
+                else state["draft"].get("summary") or ""
             ),
             review_score=review_score,
-            generation_metadata=self._build_generation_metadata(
-                context=state["context"], review_trace=review_trace
-            ),
+            generation_metadata={
+                **self._build_generation_metadata(context=state["context"], review_trace=review_trace),
+                "pending_state_deltas": final_review.get("state_deltas") or [],
+            },
         )
+        chapter.claim_token = None
+        chapter.lease_expires_at = None
         self.session.commit()
         return {
             "final_status": REVISION_PENDING,
@@ -362,7 +422,7 @@ class ChapterWorkflow:
         return "approved" if can_persist else "candidate"
 
     def _get_chapter(self, chapter_id: str) -> Chapter:
-        chapter = self.session.scalar(select(Chapter).where(Chapter.id == chapter_id))
+        chapter = self.session.scalar(select(Chapter).where(Chapter.id == chapter_id).execution_options(populate_existing=True))
         if chapter is None:
             raise ValueError(f"Chapter not found: {chapter_id}")
         return chapter

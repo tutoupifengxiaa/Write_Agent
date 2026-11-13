@@ -11,9 +11,23 @@ import uvicorn
 
 from app.application import WriteAgentApplication
 from app.config import settings
-from app.orchestrator.scheduler_runner import run_scheduler_loop
+from app.orchestrator.scheduler_runner import DEFAULT_MAX_CONSECUTIVE_FAILURES, run_scheduler_loop
 
 logger = logging.getLogger(__name__)
+WORKER_LOG_FIELDS = (
+    "batch_limit", "poll_interval_seconds", "max_cycles", "cycle_number", "status",
+    "reason_code", "duration_ms", "processed_count", "outcome_counts", "cycles",
+    "processed", "status_counts", "reason", "error_type",
+)
+
+
+class WorkerEventFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        if record.name != logger.name:
+            return message
+        fields = [f"{key}={record.__dict__[key]}" for key in WORKER_LOG_FIELDS if key in record.__dict__]
+        return " ".join([message, *fields])
 
 
 def _positive_int(value: str) -> int:
@@ -36,7 +50,7 @@ def open_creation_page(host: str = "127.0.0.1", port: int = 8000) -> None:
 
 
 def _log_worker_event(event: str, **payload) -> None:
-    logger.info(event, extra=payload)
+    logger.info(event, extra={key: payload[key] for key in WORKER_LOG_FIELDS if key in payload})
 
 
 def run_web(*, host: str = "127.0.0.1", port: int = 8000) -> None:
@@ -53,6 +67,7 @@ def run_worker(
     batch_limit: int | None = None,
     poll_interval_seconds: float | None = None,
     max_cycles: int | None = None,
+    max_consecutive_failures: int = DEFAULT_MAX_CONSECUTIVE_FAILURES,
 ) -> int:
     resolved_batch_limit = (
         getattr(settings, "worker_batch_limit", 10) if batch_limit is None else batch_limit
@@ -81,6 +96,7 @@ def run_worker(
             poll_interval_seconds=resolved_poll_interval,
             max_cycles=resolved_max_cycles,
             session=application.session,
+            max_consecutive_failures=max_consecutive_failures,
             event_callback=lambda event, payload: _log_worker_event(event, **payload),
         )
         _log_worker_event("worker.completed", **result)
@@ -89,7 +105,7 @@ def run_worker(
         _log_worker_event("worker.shutdown", reason="keyboard_interrupt")
         return 0
     except Exception as exc:
-        logger.exception("worker.fatal", extra={"error": str(exc)})
+        logger.error("worker.fatal", extra={"error_type": type(exc).__name__}, exc_info=True)
         return 1
     finally:
         close = getattr(application, "close", None)
@@ -112,11 +128,18 @@ def _build_parser() -> argparse.ArgumentParser:
     worker_parser.add_argument("--batch-limit", type=_positive_int)
     worker_parser.add_argument("--poll-interval", type=_positive_float)
     worker_parser.add_argument("--max-cycles", type=_positive_int)
+    worker_parser.add_argument(
+        "--max-consecutive-failures", type=_positive_int, default=DEFAULT_MAX_CONSECUTIVE_FAILURES
+    )
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    handler = logging.StreamHandler()
+    handler.setFormatter(WorkerEventFormatter())
+    logging.basicConfig(handlers=[handler])
+    logger.setLevel(settings.log_level.upper())
     args = list(sys.argv[1:] if argv is None else argv)
     if not args:
         run_web(host="127.0.0.1", port=8888)
@@ -134,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
             batch_limit=parsed.batch_limit,
             poll_interval_seconds=parsed.poll_interval,
             max_cycles=parsed.max_cycles,
+            max_consecutive_failures=parsed.max_consecutive_failures,
         )
 
     raise ValueError(f"unknown launch mode: {mode}")

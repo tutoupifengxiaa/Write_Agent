@@ -207,6 +207,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chapter_id: chapterId,
+          version_id: queue.find(item => item.id === chapterId)?.candidate_version?.id,
           note: noteMap[chapterId] || "",
           create_publish_job: createPublishJob,
         }),
