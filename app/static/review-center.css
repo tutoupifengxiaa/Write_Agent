@@ -3,13 +3,26 @@
   --review-muted: #6f665c;
   --review-paper: #efe2d3;
   --review-panel: rgba(255, 249, 241, 0.9);
-  --review-panel-strong: rgba(255, 253, 248, 0.96);
   --review-line: rgba(54, 42, 29, 0.14);
-  --review-shadow: 0 24px 72px rgba(54, 39, 22, 0.14);
   --review-red: #9e4636;
   --review-red-deep: #5b2219;
-  --review-bronze: #b26a2f;
   --review-green: #45644e;
+  --review-red-glow: rgba(158, 70, 54, 0.15);
+  --review-green-tint: rgba(69, 100, 78, 0.12);
+  --review-paper-highlight: #f9efe5;
+  --review-paper-edge: #d8b999;
+  --review-on-accent: #fff8f1;
+  --review-handoff-border: rgba(69, 100, 78, 0.18);
+  --review-handoff-bronze: rgba(178, 106, 47, 0.12);
+  --review-secondary-surface: rgba(255, 249, 241, 0.88);
+  --review-summary-surface: rgba(255, 255, 255, 0.38);
+  --review-chip-surface: rgba(22, 18, 14, 0.06);
+  --review-pending-ink: #6c3c12;
+  --review-revision-ink: #7a2e21;
+  --review-revision-surface: rgba(158, 70, 54, 0.14);
+  --review-note-surface: rgba(255, 252, 247, 0.94);
+  --review-button-border: rgba(22, 18, 14, 0.1);
+  --review-empty-surface: rgba(255, 255, 255, 0.22);
 }
 
 * {
@@ -22,24 +35,24 @@ body {
   color: var(--review-ink);
   font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", serif;
   background:
-    radial-gradient(circle at 10% 14%, rgba(158, 70, 54, 0.15), transparent 24rem),
-    radial-gradient(circle at 88% 8%, rgba(69, 100, 78, 0.12), transparent 22rem),
-    linear-gradient(135deg, #f9efe5 0%, var(--review-paper) 48%, #d8b999 100%);
+    radial-gradient(circle at 10% 14%, var(--review-red-glow), transparent 24rem),
+    radial-gradient(circle at 88% 8%, var(--review-green-tint), transparent 22rem),
+    linear-gradient(135deg, var(--review-paper-highlight) 0%, var(--review-paper) 48%, var(--review-paper-edge) 100%);
 }
 
 .review-shell {
   width: min(1460px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 28px 0 42px;
+  padding: var(--app-shell-padding);
 }
 
 .review-hero,
 .review-panel,
 .review-queue-card {
   border: 1px solid var(--review-line);
-  border-radius: 28px;
+  border-radius: var(--app-radius-panel);
   background: var(--review-panel);
-  box-shadow: var(--review-shadow);
+  box-shadow: var(--app-panel-shadow);
 }
 
 .review-hero,
@@ -74,47 +87,47 @@ body {
 .review-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--app-gap-actions);
   margin-top: 22px;
 }
 
 .review-link {
-  padding: 10px 14px;
+  padding: var(--app-link-padding);
   border: 1px solid var(--review-line);
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   color: var(--review-ink);
   text-decoration: none;
-  background: rgba(255, 255, 255, 0.42);
+  background: var(--app-link-surface);
 }
 
 .review-link.primary {
-  color: #fff8f1;
+  color: var(--review-on-accent);
   background: linear-gradient(135deg, var(--review-red), var(--review-red-deep));
 }
 
 .review-feedback {
   margin-top: 18px;
-  padding: 16px 18px;
-  border-radius: 18px;
+  padding: var(--app-feedback-padding);
+  border-radius: var(--app-radius-large);
 }
 
 .review-error {
-  color: #7d2a1f;
-  background: rgba(188, 92, 72, 0.12);
+  color: var(--app-error-ink);
+  background: var(--app-error-surface);
 }
 
 .review-success {
-  color: #21402a;
-  background: rgba(68, 98, 76, 0.12);
+  color: var(--app-success-ink);
+  background: var(--app-success-surface);
 }
 
 .review-handoff-card {
   margin-top: 18px;
   padding: 20px 22px;
-  border: 1px solid rgba(69, 100, 78, 0.18);
+  border: 1px solid var(--review-handoff-border);
   border-radius: 24px;
-  background: linear-gradient(135deg, rgba(69, 100, 78, 0.12), rgba(178, 106, 47, 0.12));
-  box-shadow: var(--review-shadow);
+  background: linear-gradient(135deg, var(--review-green-tint), var(--review-handoff-bronze));
+  box-shadow: var(--app-panel-shadow);
 }
 
 .review-handoff-label {
@@ -135,7 +148,7 @@ body {
 .review-handoff-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--app-gap-list);
   margin-top: 12px;
   color: var(--review-muted);
 }
@@ -148,44 +161,44 @@ body {
 .review-handoff-error {
   margin-top: 12px;
   padding: 12px 14px;
-  border-radius: 16px;
-  color: #7d2a1f;
-  background: rgba(188, 92, 72, 0.12);
+  border-radius: var(--app-radius-medium);
+  color: var(--app-error-ink);
+  background: var(--app-error-surface);
 }
 
 .review-handoff-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--app-gap-actions);
   margin-top: 16px;
 }
 
 .review-handoff-actions a {
-  padding: 10px 14px;
-  border-radius: 999px;
-  color: #fff8f1;
+  padding: var(--app-link-padding);
+  border-radius: var(--app-radius-pill);
+  color: var(--review-on-accent);
   text-decoration: none;
   background: linear-gradient(135deg, var(--review-green), var(--review-red-deep));
 }
 
 .review-handoff-actions a.secondary {
   color: var(--review-ink);
-  background: rgba(255, 249, 241, 0.88);
+  background: var(--review-secondary-surface);
   border: 1px solid var(--review-line);
 }
 
 .review-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--app-gap-list);
   margin-top: 22px;
 }
 
 .review-summary-card {
-  padding: 16px;
+  padding: var(--app-card-padding);
   border: 1px solid var(--review-line);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.38);
+  border-radius: var(--app-radius-card);
+  background: var(--review-summary-surface);
 }
 
 .review-summary-card span {
@@ -205,7 +218,7 @@ body {
 .review-layout {
   display: grid;
   grid-template-columns: 1.45fr 0.9fr;
-  gap: 18px;
+  gap: var(--app-gap-section);
   margin-top: 20px;
 }
 
@@ -221,14 +234,14 @@ body {
 
 .review-queue-card {
   padding: 18px;
-  background: var(--review-panel-strong);
+  background: var(--app-panel-strong);
 }
 
 .review-card-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--app-gap-list);
 }
 
 .review-card-meta strong,
@@ -250,7 +263,7 @@ body {
 .review-card-meta em {
   margin-top: 8px;
   font-style: normal;
-  color: var(--review-bronze);
+  color: var(--app-bronze);
 }
 
 .review-chip {
@@ -258,19 +271,19 @@ body {
   align-items: center;
   justify-content: center;
   padding: 7px 11px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   font-size: 13px;
-  background: rgba(22, 18, 14, 0.06);
+  background: var(--review-chip-surface);
 }
 
 .review-chip[data-tone="review_pending"] {
-  color: #6c3c12;
-  background: rgba(178, 106, 47, 0.14);
+  color: var(--review-pending-ink);
+  background: var(--app-pending-surface);
 }
 
 .review-chip[data-tone="revision_pending"] {
-  color: #7a2e21;
-  background: rgba(158, 70, 54, 0.14);
+  color: var(--review-revision-ink);
+  background: var(--review-revision-surface);
 }
 
 .review-card-note {
@@ -291,11 +304,11 @@ body {
   width: 100%;
   min-height: 88px;
   margin-top: 8px;
-  padding: 12px 14px;
+  padding: var(--app-control-padding);
   border: 1px solid var(--review-line);
-  border-radius: 18px;
+  border-radius: var(--app-radius-large);
   color: var(--review-ink);
-  background: rgba(255, 252, 247, 0.94);
+  background: var(--review-note-surface);
   font: inherit;
   line-height: 1.7;
   resize: vertical;
@@ -304,42 +317,42 @@ body {
 .review-card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--app-gap-actions);
   margin-top: 16px;
 }
 
 .review-card-actions a {
-  padding: 10px 14px;
-  border-radius: 999px;
-  color: #fff8f1;
+  padding: var(--app-link-padding);
+  border-radius: var(--app-radius-pill);
+  color: var(--review-on-accent);
   text-decoration: none;
   background: linear-gradient(135deg, var(--review-red), var(--review-red-deep));
 }
 
 .review-card-actions a.secondary {
   color: var(--review-ink);
-  background: rgba(255, 249, 241, 0.88);
+  background: var(--review-secondary-surface);
   border: 1px solid var(--review-line);
 }
 
 .review-action-button {
   min-height: 44px;
   padding: 10px 16px;
-  border: 1px solid rgba(22, 18, 14, 0.1);
-  border-radius: 999px;
-  color: #fff8f1;
+  border: 1px solid var(--review-button-border);
+  border-radius: var(--app-radius-pill);
+  color: var(--review-on-accent);
   background: linear-gradient(135deg, var(--review-red), var(--review-red-deep));
   font: 700 14px "Iowan Old Style", "Songti SC", serif;
   cursor: pointer;
 }
 
 .review-action-button.publish {
-  background: linear-gradient(135deg, var(--review-bronze), var(--review-green));
+  background: linear-gradient(135deg, var(--app-bronze), var(--review-green));
 }
 
 .review-action-button.secondary {
   color: var(--review-ink);
-  background: rgba(255, 249, 241, 0.88);
+  background: var(--review-secondary-surface);
   border: 1px solid var(--review-line);
 }
 
@@ -349,11 +362,11 @@ body {
 }
 
 .review-empty {
-  padding: 22px;
+  padding: var(--app-panel-padding);
   border: 1px dashed var(--review-line);
-  border-radius: 20px;
+  border-radius: var(--app-radius-card);
   color: var(--review-muted);
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--review-empty-surface);
 }
 
 .review-side-list {

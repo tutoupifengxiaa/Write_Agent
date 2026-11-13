@@ -7,7 +7,7 @@
   }
 
   const { useEffect, useRef, useState } = ReactLib;
-  const { fetchJson, requestJson, Navigation, statusLabel } = window.WriteAgentUI;
+  const { fetchJson, requestJson, Navigation, statusLabel, FormField, StatusBadge, Feedback } = window.WriteAgentUI;
 
   function getStatusTone(status) {
     return status || "idle";
@@ -209,8 +209,8 @@
         ),
         ReactLib.createElement(Navigation, { current: "/library" })
       ),
-      error ? ReactLib.createElement("div", { className: "library-error" }, error) : null,
-      success ? ReactLib.createElement("div", { className: "library-success" }, success) : null,
+      ReactLib.createElement(Feedback, { className: "library-error", message: error }),
+      ReactLib.createElement(Feedback, { className: "library-success", message: success }),
       isLoadingBook ? ReactLib.createElement("div", { className: "library-empty", role: "status" }, "正在加载书籍…") : null,
       ReactLib.createElement(
         "section",
@@ -235,11 +235,7 @@
                   },
                   ReactLib.createElement("strong", null, book.title),
                   ReactLib.createElement("span", null, book.platform + " | " + book.genre),
-                  ReactLib.createElement(
-                    "em",
-                    { className: "library-chip", "data-tone": getStatusTone(book.status) },
-                    statusLabel(book.status)
-                  )
+                  ReactLib.createElement(StatusBadge, { as: "em", className: "library-chip", "data-tone": getStatusTone(book.status), status: book.status })
                 );
               })
         ),
@@ -353,16 +349,8 @@
                       },
                       ReactLib.createElement("span", null, "#" + chapter.chapter_number),
                       ReactLib.createElement("span", null, chapter.title),
-                      ReactLib.createElement(
-                        "span",
-                        { className: "library-chip", "data-tone": getStatusTone(chapter.status) },
-                        statusLabel(chapter.status)
-                      ),
-                      ReactLib.createElement(
-                        "span",
-                        { className: "library-chip", "data-tone": getStatusTone(latestJob ? latestJob.status : "idle") },
-                        latestJob ? statusLabel(latestJob.status) : "无任务"
-                      )
+                      ReactLib.createElement(StatusBadge, { className: "library-chip", "data-tone": getStatusTone(chapter.status), status: chapter.status }),
+                      ReactLib.createElement(StatusBadge, { className: "library-chip", "data-tone": getStatusTone(latestJob ? latestJob.status : "idle") }, latestJob ? statusLabel(latestJob.status) : "无任务")
                     );
                   })
                 )
@@ -419,11 +407,7 @@
                         "div",
                         { className: "library-job-summary" },
                         ReactLib.createElement("strong", null, "发布状态："),
-                        ReactLib.createElement(
-                          "span",
-                          { className: "library-chip", "data-tone": getStatusTone(selectedChapterJob.status) },
-                          statusLabel(selectedChapterJob.status)
-                        ),
+                        ReactLib.createElement(StatusBadge, { className: "library-chip", "data-tone": getStatusTone(selectedChapterJob.status), status: selectedChapterJob.status }),
                         ReactLib.createElement("span", null, selectedChapterJob.created_at || "时间未知（历史记录）")
                       )
                     : null
@@ -436,39 +420,18 @@
             ReactLib.createElement(
               "div",
               { className: "library-form-grid" },
-              ReactLib.createElement(
-                "label",
-                null,
-                "章节号",
-                ReactLib.createElement("input", {
-                  value: chapterForm.chapterNumber,
-                  onChange: function (event) {
-                    updateChapterForm("chapterNumber", event.target.value);
-                  },
-                })
-              ),
-              ReactLib.createElement(
-                "label",
-                null,
-                "标题",
-                ReactLib.createElement("input", {
-                  value: chapterForm.title,
-                  onChange: function (event) {
-                    updateChapterForm("title", event.target.value);
-                  },
-                })
-              ),
-              ReactLib.createElement(
-                "label",
-                { className: "library-form-wide" },
-                "章节目标",
-                ReactLib.createElement("textarea", {
-                  value: chapterForm.objective,
-                  onChange: function (event) {
-                    updateChapterForm("objective", event.target.value);
-                  },
-                })
-              )
+              ReactLib.createElement(FormField, {
+                label: "章节号", wrapped: true, value: chapterForm.chapterNumber,
+                onValueChange: value => updateChapterForm("chapterNumber", value),
+              }),
+              ReactLib.createElement(FormField, {
+                label: "标题", wrapped: true, value: chapterForm.title,
+                onValueChange: value => updateChapterForm("title", value),
+              }),
+              ReactLib.createElement(FormField, {
+                label: "章节目标", wrapped: true, labelClassName: "library-form-wide", as: "textarea", value: chapterForm.objective,
+                onValueChange: value => updateChapterForm("objective", value),
+              })
             ),
             ReactLib.createElement(
               "div",
@@ -499,11 +462,7 @@
                     "div",
                     { className: "library-job-summary" },
                     ReactLib.createElement("strong", null, "最近发布状态："),
-                    ReactLib.createElement(
-                      "span",
-                      { className: "library-chip", "data-tone": getStatusTone(selectedChapterJob ? selectedChapterJob.status : "idle") },
-                      selectedChapterJob ? statusLabel(selectedChapterJob.status) : "无任务"
-                    )
+                    ReactLib.createElement(StatusBadge, { className: "library-chip", "data-tone": getStatusTone(selectedChapterJob ? selectedChapterJob.status : "idle") }, selectedChapterJob ? statusLabel(selectedChapterJob.status) : "无任务")
                   ),
                   selectedChapterJob && selectedChapterJob.error_message
                     ? ReactLib.createElement(

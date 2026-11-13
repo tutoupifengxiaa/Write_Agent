@@ -1,7 +1,7 @@
 (function () {
   const ReactLib = window.React;
   const ReactDOMLib = window.ReactDOM;
-  const { requestJson, Navigation, statusLabel } = window.WriteAgentUI;
+  const { requestJson, Navigation, statusLabel, FormField, StatusBadge, Feedback } = window.WriteAgentUI;
 
   if (!ReactLib || !ReactDOMLib) {
     throw new Error("页面运行资源加载失败，请刷新重试");
@@ -200,7 +200,7 @@
         ? ReactLib.createElement(
             "section",
             { className: "radar-panel", style: { marginTop: "18px" } },
-            ReactLib.createElement("div", { className: "radar-empty", role: "alert" }, error)
+            ReactLib.createElement(Feedback, { className: "radar-empty", role: "alert", message: error })
           )
         : null,
       ReactLib.createElement(
@@ -253,7 +253,7 @@
                 ReactLib.createElement(
                   "div",
                   { className: "radar-capture-meta", title: captureId ? "采集批次：" + captureId : undefined },
-                  ReactLib.createElement("span", { className: "capture-status", "data-status": provider.status }, COLLECTION_LABELS[provider.status] || statusLabel(provider.status)),
+                  ReactLib.createElement(StatusBadge, { className: "capture-status", "data-status": provider.status }, COLLECTION_LABELS[provider.status] || statusLabel(provider.status)),
                   ReactLib.createElement("span", null, "更新于 " + captureTime(provider.captured_at))
                 ),
                 ReactLib.createElement(
@@ -342,37 +342,21 @@
           ReactLib.createElement(
             "div",
             { className: "radar-form" },
-            ReactLib.createElement("label", { htmlFor: "direction-name" }, "写作方向"),
-            ReactLib.createElement("input", {
-              id: "direction-name",
-              value: form.directionName,
-              onChange: function (event) {
-                updateField("directionName", event.target.value);
-              },
+            ReactLib.createElement(FormField, {
+              id: "direction-name", label: "写作方向", value: form.directionName,
+              onValueChange: value => updateField("directionName", value),
             }),
-            ReactLib.createElement("label", { htmlFor: "selected-platforms" }, "目标平台"),
-            ReactLib.createElement("input", {
-              id: "selected-platforms",
-              value: form.selectedPlatforms,
-              onChange: function (event) {
-                updateField("selectedPlatforms", event.target.value);
-              },
+            ReactLib.createElement(FormField, {
+              id: "selected-platforms", label: "目标平台", value: form.selectedPlatforms,
+              onValueChange: value => updateField("selectedPlatforms", value),
             }),
-            ReactLib.createElement("label", { htmlFor: "keywords" }, "关键词"),
-            ReactLib.createElement("input", {
-              id: "keywords",
-              value: form.keywords,
-              onChange: function (event) {
-                updateField("keywords", event.target.value);
-              },
+            ReactLib.createElement(FormField, {
+              id: "keywords", label: "关键词", value: form.keywords,
+              onValueChange: value => updateField("keywords", value),
             }),
-            ReactLib.createElement("label", { htmlFor: "notes" }, "补充说明"),
-            ReactLib.createElement("textarea", {
-              id: "notes",
-              value: form.notes,
-              onChange: function (event) {
-                updateField("notes", event.target.value);
-              },
+            ReactLib.createElement(FormField, {
+              id: "notes", label: "补充说明", as: "textarea", value: form.notes,
+              onValueChange: value => updateField("notes", value),
             }),
             ReactLib.createElement(
               "button",

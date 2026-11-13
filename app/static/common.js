@@ -61,5 +61,22 @@
     return labels[value] || value || "暂无状态";
   }
 
-  window.WriteAgentUI = { fetchJson: fetchJson, requestJson: requestJson, NavLink: NavLink, Navigation: Navigation, statusLabel: statusLabel };
+  function FormField({ id, label, as = "input", wrapped = false, labelClassName, onValueChange, children, ...controlProps }) {
+    const control = ReactLib.createElement(as, {
+      ...controlProps, id, onChange: event => onValueChange(event.target.value),
+    }, children);
+    const labelProps = { htmlFor: id, className: labelClassName };
+    if (wrapped) return ReactLib.createElement("label", labelProps, label, control);
+    return ReactLib.createElement(ReactLib.Fragment, null, ReactLib.createElement("label", labelProps, label), control);
+  }
+
+  function StatusBadge({ as = "span", status, children, ...props }) {
+    return ReactLib.createElement(as, props, children ?? statusLabel(status));
+  }
+
+  function Feedback({ message, children, ...props }) {
+    return message ? ReactLib.createElement("div", props, message, children) : null;
+  }
+
+  window.WriteAgentUI = { fetchJson, requestJson, NavLink, Navigation, statusLabel, FormField, StatusBadge, Feedback };
 })();

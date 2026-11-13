@@ -1,7 +1,7 @@
 (function () {
   const ReactLib = window.React;
   const ReactDOMLib = window.ReactDOM;
-  const { fetchJson, requestJson, Navigation, statusLabel } = window.WriteAgentUI;
+  const { fetchJson, requestJson, Navigation, statusLabel, FormField, StatusBadge, Feedback } = window.WriteAgentUI;
 
   if (!ReactLib || !ReactDOMLib) {
     throw new Error("页面运行资源加载失败，请刷新重试");
@@ -107,10 +107,10 @@
                   ReactLib.createElement(
                     "div",
                     { className: "review-card-actions" },
-                    ReactLib.createElement("span", { className: "review-chip", "data-tone": issue.severity }, issue.type || "未分类"),
-                    ReactLib.createElement("span", { className: "review-chip", "data-tone": issue.severity }, issue.severity || "未分级"),
+                    ReactLib.createElement(StatusBadge, { className: "review-chip", "data-tone": issue.severity }, issue.type || "未分类"),
+                    ReactLib.createElement(StatusBadge, { className: "review-chip", "data-tone": issue.severity }, issue.severity || "未分级"),
                     ReactLib.createElement("span", { className: "review-chip" }, issue.source || "来源未知"),
-                    ReactLib.createElement("span", { className: "review-chip" }, issueResolution(trace, issue.id))
+                    ReactLib.createElement(StatusBadge, { className: "review-chip" }, issueResolution(trace, issue.id))
                   ),
                   ReactLib.createElement("p", null, issue.message || "未记录问题说明"),
                   ReactLib.createElement("p", null, "证据：" + (issue.evidence || "未记录证据"))
@@ -170,13 +170,27 @@
         return undefined;
       }
 
-      refreshHandoffJob(handoff.publishJobId);
-      const timer = window.setInterval(function () {
-        refreshHandoffJob(handoff.publishJobId);
-      }, 4000);
+      let timer = null;
+      function stopPolling() {
+        if (timer !== null) {
+          window.clearInterval(timer);
+          timer = null;
+        }
+      }
+      function updatePolling() {
+        if (document.hidden) {
+          stopPolling();
+        } else if (timer === null) {
+          refreshHandoffJob(handoff.publishJobId);
+          timer = window.setInterval(() => refreshHandoffJob(handoff.publishJobId), 4000);
+        }
+      }
 
+      document.addEventListener("visibilitychange", updatePolling);
+      updatePolling();
       return function () {
-        window.clearInterval(timer);
+        document.removeEventListener("visibilitychange", updatePolling);
+        stopPolling();
       };
     }, [handoff && handoff.publishJobId]);
 
@@ -335,8 +349,8 @@
           ReactLib.createElement("div", { className: "review-summary-card" }, ReactLib.createElement("span", null, "待按建议修订"), ReactLib.createElement("strong", null, String(summary.revisionPending)))
         )
       ),
-      error ? ReactLib.createElement("div", { className: "review-feedback review-error", role: "alert" }, error) : null,
-      success ? ReactLib.createElement("div", { className: "review-feedback review-success" }, success) : null,
+      ReactLib.createElement(Feedback, { className: "review-feedback review-error", role: "alert", message: error }),
+      ReactLib.createElement(Feedback, { className: "review-feedback review-success", message: success }),
       handoff
         ? ReactLib.createElement(
             "section",
@@ -347,11 +361,9 @@
               "div",
               { className: "review-handoff-meta" },
               ReactLib.createElement("span", null, "发布任务：" + handoff.publishJobId),
-              ReactLib.createElement("span", { className: "review-handoff-status" }, "状态：" + statusLabel(handoff.status))
+              ReactLib.createElement(StatusBadge, { className: "review-handoff-status" }, "状态：" + statusLabel(handoff.status))
             ),
-            handoff.errorMessage
-              ? ReactLib.createElement("div", { className: "review-handoff-error" }, handoff.errorMessage)
-              : null,
+            ReactLib.createElement(Feedback, { className: "review-handoff-error", message: handoff.errorMessage }),
             ReactLib.createElement(
               "div",
               { className: "review-handoff-actions" },
@@ -420,18 +432,16 @@
                         ReactLib.createElement("span", null, item.book_title + " · 第 " + item.chapter_number + " 章"),
                         ReactLib.createElement("em", null, item.goal && item.goal.objective ? item.goal.objective : "未填写章节目标")
                       ),
-                      ReactLib.createElement("span", { className: "review-chip", "data-tone": item.status }, statusLabel(item.status))
+                      ReactLib.createElement(StatusBadge, { className: "review-chip", "data-tone": item.status, status: item.status })
                     ),
                     ReactLib.createElement("div", { className: "review-card-note" }, item.manual_review_note || "暂无人工备注"),
                     renderReviewAudit(item),
-                    ReactLib.createElement("label", { className: "review-note-label", htmlFor: "review-note-" + item.id }, "审核备注"),
-                    ReactLib.createElement("textarea", {
+                    ReactLib.createElement(FormField, {
+                      as: "textarea", label: "审核备注", labelClassName: "review-note-label",
                       id: "review-note-" + item.id,
                       className: "review-note-input",
                       value: noteMap[item.id] || "",
-                      onChange: function (event) {
-                        updateNote(item.id, event.target.value);
-                      },
+                      onValueChange: value => updateNote(item.id, value),
                     }),
                     ReactLib.createElement(
                       "div",

@@ -8,6 +8,26 @@
   --radar-copper: #b36a2e;
   --radar-copper-deep: #6d3d17;
   --radar-teal: #44655d;
+  --radar-copper-glow: rgba(179, 106, 46, 0.16);
+  --radar-teal-glow: rgba(68, 101, 93, 0.15);
+  --radar-paper-highlight: #f9f1e4;
+  --radar-paper-edge: #ddc5a6;
+  --radar-platform-hover: #f2e7d9;
+  --radar-platform-selected-border: #c8a080;
+  --radar-platform-selected-surface: #efe1d1;
+  --radar-warning-ink: #a13e26;
+  --radar-scrollbar: #c7b59e;
+  --radar-book-hover: rgba(179, 106, 46, 0.04);
+  --radar-book-selected: rgba(68, 101, 93, 0.09);
+  --radar-rank-ink: #9b9084;
+  --radar-insight-surface: rgba(68, 101, 93, 0.04);
+  --radar-card-surface: rgba(255, 255, 255, 0.6);
+  --radar-chip-surface: rgba(25, 24, 22, 0.06);
+  --radar-input-border: rgba(25, 24, 22, 0.14);
+  --radar-input-surface: rgba(255, 254, 250, 0.78);
+  --radar-button-border: rgba(25, 24, 22, 0.12);
+  --radar-output-surface: rgba(68, 101, 93, 0.08);
+  --radar-result-surface: rgba(255, 255, 255, 0.64);
 }
 
 * {
@@ -20,9 +40,9 @@ body {
   color: var(--radar-ink);
   font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", serif;
   background:
-    radial-gradient(circle at 14% 18%, rgba(179, 106, 46, 0.16), transparent 24rem),
-    radial-gradient(circle at 85% 10%, rgba(68, 101, 93, 0.15), transparent 22rem),
-    linear-gradient(145deg, #f9f1e4 0%, var(--radar-paper) 46%, #ddc5a6 100%);
+    radial-gradient(circle at 14% 18%, var(--radar-copper-glow), transparent 24rem),
+    radial-gradient(circle at 85% 10%, var(--radar-teal-glow), transparent 22rem),
+    linear-gradient(145deg, var(--radar-paper-highlight) 0%, var(--radar-paper) 46%, var(--radar-paper-edge) 100%);
 }
 
 .radar-shell {
@@ -34,13 +54,13 @@ body {
 .radar-hero,
 .radar-panel {
   border: 1px solid var(--radar-line);
-  border-radius: 18px;
+  border-radius: var(--app-radius-large);
   background: var(--radar-panel);
   box-shadow: var(--radar-shadow);
 }
 
 .radar-hero {
-  padding: 30px;
+  padding: var(--app-hero-padding);
 }
 
 .radar-eyebrow {
@@ -70,21 +90,21 @@ body {
 .radar-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--app-gap-actions);
   margin-top: 22px;
 }
 
 .radar-link {
-  padding: 10px 14px;
+  padding: var(--app-link-padding);
   border: 1px solid var(--radar-line);
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   color: var(--radar-ink);
   text-decoration: none;
-  background: rgba(255, 255, 255, 0.42);
+  background: var(--app-link-surface);
 }
 
 .radar-link.primary {
-  color: #fff9ef;
+  color: var(--app-on-accent);
   background: linear-gradient(135deg, var(--radar-copper), var(--radar-copper-deep));
 }
 
@@ -92,7 +112,7 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
   align-items: start;
-  gap: 18px;
+  gap: var(--app-gap-section);
   margin-top: 20px;
 }
 
@@ -110,7 +130,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--app-gap-list);
   margin-bottom: 18px;
 }
 
@@ -121,7 +141,7 @@ body {
   min-height: 38px;
   margin: 0;
   padding: 8px 16px;
-  border-radius: 10px;
+  border-radius: var(--app-radius);
   box-shadow: none;
   font-size: 13px;
 }
@@ -138,11 +158,11 @@ body {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--app-gap-inline);
   min-height: 42px;
   padding: 8px 12px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--app-radius);
   background: transparent;
   color: var(--radar-muted);
   font: inherit;
@@ -150,10 +170,10 @@ body {
   cursor: pointer;
 }
 
-.radar-platform:hover { background: #f2e7d9; }
+.radar-platform:hover { background: var(--radar-platform-hover); }
 .radar-platform[aria-pressed="true"] {
-  border-color: #c8a080;
-  background: #efe1d1;
+  border-color: var(--radar-platform-selected-border);
+  background: var(--radar-platform-selected-surface);
   color: var(--radar-copper-deep);
   font-weight: 700;
 }
@@ -173,7 +193,7 @@ body {
 
 .capture-status[data-status="real"] { color: var(--radar-teal); }
 .capture-status[data-status="failed"],
-.capture-status[data-status="degraded"] { color: #a13e26; }
+.capture-status[data-status="degraded"] { color: var(--radar-warning-ink); }
 
 .radar-list.radar-ranking-list {
   display: block;
@@ -181,20 +201,20 @@ body {
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scrollbar-width: thin;
-  scrollbar-color: #c7b59e transparent;
+  scrollbar-color: var(--radar-scrollbar) transparent;
   scrollbar-gutter: stable;
 }
 
 .radar-book { border-bottom: 1px solid var(--radar-line); }
 .radar-book:last-child { border-bottom: 0; }
-.radar-book:hover { background: rgba(179, 106, 46, 0.04); }
-.radar-book.is-selected { background: rgba(68, 101, 93, 0.09); }
+.radar-book:hover { background: var(--radar-book-hover); }
+.radar-book.is-selected { background: var(--radar-book-selected); }
 
 .radar-book-choice {
   display: grid;
   grid-template-columns: 18px 28px minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
+  gap: var(--app-gap-list);
   padding: 15px 10px;
   cursor: pointer;
 }
@@ -208,7 +228,7 @@ body {
 
 .radar-rank {
   padding-top: 2px;
-  color: #9b9084;
+  color: var(--radar-rank-ink);
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
@@ -230,21 +250,21 @@ body {
 }
 .radar-selection strong { color: var(--radar-teal); font-size: 14px; }
 
-.radar-insights .radar-card { padding: 14px; border-radius: 12px; background: rgba(68, 101, 93, 0.04); }
+.radar-insights .radar-card { padding: 14px; border-radius: var(--app-radius-compact); background: var(--radar-insight-surface); }
 .radar-insights h3 { font-size: 16px; }
 .radar-insights .radar-meta { gap: 5px; margin-top: 8px; }
 .radar-insights .radar-chip { padding: 4px 8px; font-size: 12px; }
 
 .radar-list {
   display: grid;
-  gap: 12px;
+  gap: var(--app-gap-list);
 }
 
 .radar-card {
-  padding: 16px;
+  padding: var(--app-card-padding);
   border: 1px solid var(--radar-line);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.6);
+  border-radius: var(--app-radius-card);
+  background: var(--radar-card-surface);
 }
 
 .radar-card h3 {
@@ -261,15 +281,15 @@ body {
 .radar-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--app-gap-inline);
   margin-top: 10px;
 }
 
 .radar-chip {
-  padding: 7px 10px;
-  border-radius: 999px;
+  padding: var(--app-chip-padding);
+  border-radius: var(--app-radius-pill);
   color: var(--radar-muted);
-  background: rgba(25, 24, 22, 0.06);
+  background: var(--radar-chip-surface);
   font-size: 13px;
 }
 
@@ -286,11 +306,11 @@ body {
 .radar-form textarea {
   width: 100%;
   margin-top: 8px;
-  border: 1px solid rgba(25, 24, 22, 0.14);
-  border-radius: 10px;
+  border: 1px solid var(--radar-input-border);
+  border-radius: var(--app-radius);
   padding: 10px 12px;
   color: var(--radar-ink);
-  background: rgba(255, 254, 250, 0.78);
+  background: var(--radar-input-surface);
   font: inherit;
 }
 
@@ -304,9 +324,9 @@ body {
   margin-top: 16px;
   min-height: 44px;
   width: 100%;
-  border: 1px solid rgba(25, 24, 22, 0.12);
-  border-radius: 10px;
-  color: #fff9ef;
+  border: 1px solid var(--radar-button-border);
+  border-radius: var(--app-radius);
+  color: var(--app-on-accent);
   background: linear-gradient(135deg, var(--radar-copper), var(--radar-copper-deep));
   box-shadow: none;
   font: 700 15px "Iowan Old Style", "Songti SC", serif;
@@ -315,10 +335,10 @@ body {
 
 .radar-output {
   margin-top: 16px;
-  padding: 16px;
+  padding: var(--app-card-padding);
   border: 1px solid var(--radar-line);
-  border-radius: 20px;
-  background: rgba(68, 101, 93, 0.08);
+  border-radius: var(--app-radius-card);
+  background: var(--radar-output-surface);
 }
 
 .radar-output h3 {
@@ -333,10 +353,10 @@ body {
 }
 
 .radar-result-block {
-  padding: 16px;
+  padding: var(--app-card-padding);
   border: 1px solid var(--radar-line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.64);
+  border-radius: var(--app-radius-large);
+  background: var(--radar-result-surface);
 }
 
 .radar-result-block-wide {
@@ -363,7 +383,7 @@ body {
 .radar-empty {
   padding: 18px;
   border: 1px dashed var(--radar-line);
-  border-radius: 18px;
+  border-radius: var(--app-radius-large);
   color: var(--radar-muted);
   text-align: center;
 }
@@ -377,9 +397,9 @@ body {
 
 @media (max-width: 600px) {
   .radar-shell { width: calc(100% - 24px); padding-top: 12px; }
-  .radar-panel { padding: 16px; }
+  .radar-panel { padding: var(--app-card-padding); }
   .radar-grid { gap: 14px; }
   .radar-platform { gap: 5px; padding: 8px; font-size: 13px; }
-  .radar-book-choice { gap: 8px; padding: 13px 4px; }
+  .radar-book-choice { gap: var(--app-gap-inline); padding: 13px 4px; }
   .radar-list.radar-ranking-list { max-height: 440px; }
 }

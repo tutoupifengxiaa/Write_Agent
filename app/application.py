@@ -39,6 +39,7 @@ from app.services.embedding import (
     OpenAICompatibleEmbeddingClient,
 )
 from app.services.llm_client import OpenAIResponsesLLMClient
+from app.ui.page_shell import static_url
 
 
 @dataclass
@@ -342,10 +343,12 @@ def _configure_access_control(app: FastAPI, expected_digest: str) -> None:
     def login_page(*, failed: bool = False) -> HTMLResponse:
         message = '<p role="alert">访问令牌错误</p>' if failed else ""
         return HTMLResponse(
-            '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>登录</title>'
+            '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1"><title>登录</title>'
+            f'<link rel="stylesheet" href="{static_url("common.css")}"></head><body class="login-page">'
             '<main><h1>登录</h1><form method="post" action="/login">'
             '<label>访问令牌 <input name="token" type="password" required></label>'
-            f'<button type="submit">登录</button></form>{message}</main></html>',
+            f'<button type="submit">登录</button></form>{message}</main></body></html>',
             status_code=401 if failed else 200,
         )
 

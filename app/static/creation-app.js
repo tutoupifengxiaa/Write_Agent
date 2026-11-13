@@ -1,17 +1,11 @@
 (function () {
   const {createElement: h, useEffect, useRef, useState} = window.React;
-  const {fetchJson, requestJson, Navigation, statusLabel} = window.WriteAgentUI;
+  const {fetchJson, requestJson, Navigation, FormField, StatusBadge, Feedback} = window.WriteAgentUI;
   const {parseSseChunk} = window.CreationStream;
   const {renderRetrievalAudit} = window.CreationPanels;
   const EMPTY_FORM = {chapterTitle: "", chapterGoal: "", mustInclude: "", mustAvoid: "", styleRules: "", targetWords: 2500};
   const normalizeLines = value => Array.isArray(value) ? value.join("\n") : String(value || "");
   const snapshot = (title, content, summary) => JSON.stringify([title, content, summary]);
-
-  function Field({id, label, value, onChange, disabled, type}) {
-    return h("label", {className: "task-field", htmlFor: id}, label,
-      h(type ? "input" : "textarea", {id, type, value, disabled, min: type === "number" ? 1 : undefined,
-        max: type === "number" ? 50000 : undefined, onChange: event => onChange(event.target.value)}));
-  }
 
   function App() {
     const [form, setForm] = useState(EMPTY_FORM);
@@ -197,7 +191,12 @@
       notify("已回填选中版本，保存后生效。");
     }
 
-    const field = (id, label, key, type) => h(Field, {id, label, type, value: form[key], disabled: !!busy || loading, onChange: value => updateField(key, value)});
+    const taskField = {wrapped: true, labelClassName: "task-field", as: "textarea"};
+    const field = (id, label, key, type) => h(FormField, {
+      ...taskField, id, label, type, as: type ? "input" : "textarea", value: form[key], disabled: !!busy || loading,
+      min: type === "number" ? 1 : undefined, max: type === "number" ? 50000 : undefined,
+      onValueChange: value => updateField(key, value),
+    });
     return h("main", {className: "shell"},
       h("header", {className: "hero"},
         h("div", {className: "heading-row"}, h("div", null, h("p", {className: "eyebrow"}, "WRITE AGENT / WORKSPACE"), h("h1", null, "创作台")),
@@ -205,9 +204,9 @@
         h(Navigation, {current: "/creation"}),
         h("div", {className: "chapter-context"}, h("strong", null, bookTitle),
           chapter ? h("span", null, "第 " + chapter.chapter_number + " 章 · " + chapter.title) : h("a", {href: "/library"}, "选择章节"),
-          chapter ? h("span", {className: "state-chip"}, statusLabel(chapter.status)) : null)),
-      feedback.text ? h("div", {id: "feedback-output", className: "feedback", role: feedback.error ? "alert" : "status", "data-error": feedback.error},
-        feedback.text, feedback.error && !chapter ? h("button", {className: "secondary", disabled: loading, onClick: loadChapter}, "重新加载") : null) : null,
+          chapter ? h(StatusBadge, {className: "state-chip", status: chapter.status}) : null)),
+      h(Feedback, {message: feedback.text, id: "feedback-output", className: "feedback", role: feedback.error ? "alert" : "status", "data-error": feedback.error},
+        feedback.error && !chapter ? h("button", {className: "secondary", disabled: loading, onClick: loadChapter}, "重新加载") : null),
       loading ? h("p", {role: "status"}, "正在加载章节…") : null,
       h("div", {className: "workspace"},
         h("section", {className: "panel editor-panel"},
@@ -215,7 +214,7 @@
           preview ? h("p", {className: "preview-note", role: "status"}, "生成预览 · 完整结束后替换原稿") : null,
           h("textarea", {id: "draft-output", className: "draft", "aria-label": "章节正文", value: preview ? preview.draft : draft,
             disabled: !!busy || loading, placeholder: "开始写作，或填写任务后生成正文…", onChange: event => setDraft(event.target.value)}),
-          h(Field, {id: "chapter-summary", label: "章节摘要", value: summary, disabled: !!busy || loading, onChange: setSummary}),
+          h(FormField, {...taskField, id: "chapter-summary", label: "章节摘要", value: summary, disabled: !!busy || loading, onValueChange: setSummary}),
           h("span", {id: "summary-output", className: "visually-hidden"}, summary)),
         h("aside", {className: "support-panels"},
           h("details", {className: "panel", open: !chapter}, h("summary", null, "章节任务与约束"),
@@ -229,7 +228,7 @@
                 h("button", {className: "secondary", disabled: !!busy, onClick: () => applyVersionToDraft(version)}, "回填到编辑区")))),
             selectedVersion ? h("div", {className: "version-preview"}, h("h3", null, "版本预览"), h("p", null, selectedVersion.content || "该版本没有正文")) : null),
           h("details", {className: "panel"}, h("summary", null, "审核与检索证据"),
-            h(Field, {id: "manual-review-note", label: "审核备注", value: manualReviewNote, disabled: !!busy, onChange: setManualReviewNote}),
+            h(FormField, {...taskField, id: "manual-review-note", label: "审核备注", value: manualReviewNote, disabled: !!busy, onValueChange: setManualReviewNote}),
             selectedVersion ? renderRetrievalAudit(selectedVersion) : h("p", null, "暂无检索证据"),
             h("div", {id: "state-deltas-output"}, h("h3", null, "待审核状态变化"),
               stateDeltas.length ? stateDeltas.map((item, index) => h("p", {key: index}, item.change || JSON.stringify(item))) : h("p", null, "暂无待审核状态变化")),

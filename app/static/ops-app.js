@@ -7,7 +7,7 @@
   }
 
   const { useEffect, useRef, useState } = ReactLib;
-  const { fetchJson, Navigation, statusLabel } = window.WriteAgentUI;
+  const { fetchJson, Navigation, statusLabel, StatusBadge, Feedback } = window.WriteAgentUI;
 
   function toneForStatus(status) {
     switch (status) {
@@ -99,8 +99,9 @@
         return ReactLib.createElement("div", { className: "ops-loading", role: "status" }, "正在加载" + resources[name].label + "…");
       }
       if (!state.error) return null;
-      return ReactLib.createElement("div", { className: "ops-empty", role: "alert" },
-        resources[name].label + "加载失败：" + state.error + " ",
+      return ReactLib.createElement(Feedback, {
+        className: "ops-empty", role: "alert", message: resources[name].label + "加载失败：" + state.error + " ",
+      },
         ReactLib.createElement("button", { type: "button", onClick: function () { loadModule(name); } }, "重试"));
     }
 
@@ -160,7 +161,7 @@
         ? ReactLib.createElement(
             "section",
             { className: "ops-panel", style: { marginTop: "18px" } },
-            ReactLib.createElement("div", { className: "ops-empty", role: "alert" }, error),
+            ReactLib.createElement(Feedback, { className: "ops-empty", role: "alert", message: error }),
             ReactLib.createElement("button", { type: "button", onClick: function () { handleSelectRun(selectedRunId); } }, "重试运行详情")
           )
         : null,
@@ -192,11 +193,7 @@
                         "div",
                         { className: "ops-card-top" },
                         ReactLib.createElement("strong", { className: "ops-card-title" }, job.chapter_id),
-                        ReactLib.createElement(
-                          "span",
-                          { className: "ops-chip", "data-tone": toneForStatus(job.status) },
-                          statusLabel(job.status)
-                        )
+                        ReactLib.createElement(StatusBadge, { className: "ops-chip", "data-tone": toneForStatus(job.status), status: job.status })
                       ),
                       ReactLib.createElement(
                         "div",
@@ -250,11 +247,7 @@
                             "div",
                             { className: "ops-card-top" },
                             ReactLib.createElement("strong", { className: "ops-card-title" }, "运行轮次 #" + run.cycle_number),
-                            ReactLib.createElement(
-                              "span",
-                              { className: "ops-chip", "data-tone": toneForStatus(run.status) },
-                              statusLabel(run.status)
-                            )
+                            ReactLib.createElement(StatusBadge, { className: "ops-chip", "data-tone": toneForStatus(run.status), status: run.status })
                           ),
                           ReactLib.createElement(
                             "div",
@@ -290,7 +283,7 @@
                     ReactLib.createElement(
                       "div",
                       { className: "ops-card-meta" },
-                      ReactLib.createElement("span", { className: "ops-chip", "data-tone": toneForStatus(selectedRun.status) }, statusLabel(selectedRun.status)),
+                      ReactLib.createElement(StatusBadge, { className: "ops-chip", "data-tone": toneForStatus(selectedRun.status), status: selectedRun.status }),
                       ReactLib.createElement("span", { className: "ops-chip" }, "已处理 " + selectedRun.processed_count),
                       ReactLib.createElement("span", { className: "ops-chip" }, selectedRun.reason_code || "未知"),
                       ReactLib.createElement("span", { className: "ops-chip" }, String(selectedRun.duration_ms || 0) + " ms"),
@@ -310,11 +303,7 @@
                               "div",
                               { className: "ops-card-top" },
                               ReactLib.createElement("strong", { className: "ops-card-title" }, outcome.item_id || "未知任务"),
-                              ReactLib.createElement(
-                                "span",
-                                { className: "ops-chip", "data-tone": toneForStatus(outcome.final_status) },
-                                statusLabel(outcome.final_status)
-                              )
+                              ReactLib.createElement(StatusBadge, { className: "ops-chip", "data-tone": toneForStatus(outcome.final_status), status: outcome.final_status })
                             ),
                             ReactLib.createElement(
                               "div",
@@ -352,8 +341,8 @@
                       "div",
                       { className: "ops-card-meta" },
                       ReactLib.createElement("span", { className: "ops-chip" }, "总轮次 " + summary.total_runs),
-                      ReactLib.createElement("span", { className: "ops-chip", "data-tone": "processed" }, "已处理 " + summary.processed_runs),
-                      ReactLib.createElement("span", { className: "ops-chip", "data-tone": "idle" }, "空闲轮次 " + summary.idle_runs)
+                      ReactLib.createElement(StatusBadge, { className: "ops-chip", "data-tone": "processed" }, "已处理 " + summary.processed_runs),
+                      ReactLib.createElement(StatusBadge, { className: "ops-chip", "data-tone": "idle" }, "空闲轮次 " + summary.idle_runs)
                     )
                   )
                 ) : null)
@@ -380,7 +369,7 @@
                         "div",
                         { className: "ops-card-top" },
                         ReactLib.createElement("strong", { className: "ops-card-title" }, statusLabel(cluster.final_status)),
-                        ReactLib.createElement("span", { className: "ops-chip", "data-tone": toneForStatus(cluster.final_status) }, "x" + cluster.count)
+                        ReactLib.createElement(StatusBadge, { className: "ops-chip", "data-tone": toneForStatus(cluster.final_status) }, "x" + cluster.count)
                       ),
                       ReactLib.createElement(
                         "div",
@@ -416,11 +405,7 @@
                         "div",
                         { className: "ops-card-top" },
                         ReactLib.createElement("strong", { className: "ops-card-title" }, job.chapter_id),
-                        ReactLib.createElement(
-                          "span",
-                          { className: "ops-chip", "data-tone": toneForStatus(job.status) },
-                          statusLabel(job.status)
-                        )
+                        ReactLib.createElement(StatusBadge, { className: "ops-chip", "data-tone": toneForStatus(job.status), status: job.status })
                       ),
                       ReactLib.createElement(
                         "div",

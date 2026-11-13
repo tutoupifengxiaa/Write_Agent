@@ -1,7 +1,7 @@
 (function () {
   const ReactLib = window.React;
   const ReactDOMLib = window.ReactDOM;
-  const { fetchJson, requestJson, Navigation } = window.WriteAgentUI;
+  const { fetchJson, requestJson, Navigation, FormField, Feedback } = window.WriteAgentUI;
 
   if (!ReactLib || !ReactDOMLib) {
     throw new Error("页面运行资源加载失败，请刷新重试");
@@ -321,9 +321,9 @@
         ),
         ReactLib.createElement(Navigation, { current: "/outline" })
       ),
-      error ? ReactLib.createElement("div", { className: "outline-error", role: "alert" }, error) : null,
-      saveMessage ? ReactLib.createElement("div", { className: "outline-success" }, saveMessage) : null,
-      planMessage ? ReactLib.createElement("div", { className: "outline-success" }, planMessage) : null,
+      ReactLib.createElement(Feedback, { className: "outline-error", role: "alert", message: error }),
+      ReactLib.createElement(Feedback, { className: "outline-success", message: saveMessage }),
+      ReactLib.createElement(Feedback, { className: "outline-success", message: planMessage }),
       ReactLib.createElement(
         "section",
         { className: "outline-grid" },
@@ -331,84 +331,46 @@
           "section",
           { className: "outline-panel outline-form-panel" },
           ReactLib.createElement("h2", null, "生成设定"),
-          ReactLib.createElement("label", { htmlFor: "book-id" }, "目标书籍"),
           ReactLib.createElement(
-            "select",
+            FormField,
             {
-              id: "book-id",
+              id: "book-id", label: "目标书籍", as: "select",
               disabled: busy || books.length === 0,
               value: form.bookId,
-              onChange: function (event) {
-                updateField("bookId", event.target.value);
-              },
+              onValueChange: value => updateField("bookId", value),
             },
             books.length === 0 ? ReactLib.createElement("option", { value: "" }, "暂无书籍，请先在文章管理中新建") : null,
             books.map(function (book) {
               return ReactLib.createElement("option", { key: book.id, value: book.id }, book.title);
             })
           ),
-          ReactLib.createElement("label", { htmlFor: "outline-title" }, "书名"),
-          ReactLib.createElement("input", {
-            id: "outline-title",
-            disabled: busy,
-            value: form.title,
-            onChange: function (event) {
-              updateField("title", event.target.value);
-            },
+          ReactLib.createElement(FormField, {
+            id: "outline-title", label: "书名", disabled: busy, value: form.title,
+            onValueChange: value => updateField("title", value),
           }),
-          ReactLib.createElement("label", { htmlFor: "outline-platform" }, "平台"),
-          ReactLib.createElement("input", {
-            id: "outline-platform",
-            disabled: busy,
-            value: form.platform,
-            onChange: function (event) {
-              updateField("platform", event.target.value);
-            },
+          ReactLib.createElement(FormField, {
+            id: "outline-platform", label: "平台", disabled: busy, value: form.platform,
+            onValueChange: value => updateField("platform", value),
           }),
-          ReactLib.createElement("label", { htmlFor: "outline-genre" }, "题材"),
-          ReactLib.createElement("input", {
-            id: "outline-genre",
-            disabled: busy,
-            value: form.genre,
-            onChange: function (event) {
-              updateField("genre", event.target.value);
-            },
+          ReactLib.createElement(FormField, {
+            id: "outline-genre", label: "题材", disabled: busy, value: form.genre,
+            onValueChange: value => updateField("genre", value),
           }),
-          ReactLib.createElement("label", { htmlFor: "direction-name" }, "方向名称"),
-          ReactLib.createElement("input", {
-            id: "direction-name",
-            disabled: busy,
-            value: form.directionName,
-            onChange: function (event) {
-              updateField("directionName", event.target.value);
-            },
+          ReactLib.createElement(FormField, {
+            id: "direction-name", label: "方向名称", disabled: busy, value: form.directionName,
+            onValueChange: value => updateField("directionName", value),
           }),
-          ReactLib.createElement("label", { htmlFor: "core-hook" }, "核心钩子"),
-          ReactLib.createElement("textarea", {
-            id: "core-hook",
-            disabled: busy,
-            value: form.coreHook,
-            onChange: function (event) {
-              updateField("coreHook", event.target.value);
-            },
+          ReactLib.createElement(FormField, {
+            id: "core-hook", label: "核心钩子", as: "textarea", disabled: busy, value: form.coreHook,
+            onValueChange: value => updateField("coreHook", value),
           }),
-          ReactLib.createElement("label", { htmlFor: "audience" }, "目标读者"),
-          ReactLib.createElement("input", {
-            id: "audience",
-            disabled: busy,
-            value: form.audience,
-            onChange: function (event) {
-              updateField("audience", event.target.value);
-            },
+          ReactLib.createElement(FormField, {
+            id: "audience", label: "目标读者", disabled: busy, value: form.audience,
+            onValueChange: value => updateField("audience", value),
           }),
-          ReactLib.createElement("label", { htmlFor: "outline-notes" }, "补充说明"),
-          ReactLib.createElement("textarea", {
-            id: "outline-notes",
-            disabled: busy,
-            value: form.notes,
-            onChange: function (event) {
-              updateField("notes", event.target.value);
-            },
+          ReactLib.createElement(FormField, {
+            id: "outline-notes", label: "补充说明", as: "textarea", disabled: busy, value: form.notes,
+            onValueChange: value => updateField("notes", value),
           }),
           ReactLib.createElement(
             "div",

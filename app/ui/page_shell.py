@@ -1,20 +1,47 @@
 from __future__ import annotations
 
+from hashlib import sha256
 from html import escape
+from pathlib import Path
+
+
+STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
+
+
+def _static_versions(directory: Path) -> dict[str, str]:
+    versions = {}
+    for path in directory.rglob("*"):
+        if path.is_file():
+            try:
+                versions[path.relative_to(directory).as_posix()] = sha256(path.read_bytes()).hexdigest()[:12]
+            except FileNotFoundError:
+                continue
+    return versions
+
+
+STATIC_VERSIONS = _static_versions(STATIC_DIR)
+
+
+def static_url(filename: str) -> str:
+    url = f"/static/{filename}"
+    version = STATIC_VERSIONS.get(filename)
+    return f"{url}?v={version}" if version else url
 
 
 def render_page_shell(title: str, page: str, *, extra_scripts: tuple[str, ...] = ()) -> str:
     title = escape(title)
+    stylesheet = escape(static_url(f"{page}.css"))
+    page_script = escape(static_url(f"{page}-app.js"))
     page = escape(page, quote=True)
-    scripts = "\n".join(f'  <script src="/static/{escape(script, quote=True)}"></script>' for script in extra_scripts)
+    scripts = "\n".join(f'  <script src="{escape(static_url(script))}"></script>' for script in extra_scripts)
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title} | Write Agent</title>
-  <link rel="stylesheet" href="/static/common.css">
-  <link rel="stylesheet" href="/static/{page}.css">
+  <link rel="stylesheet" href="{static_url("common.css")}">
+  <link rel="stylesheet" href="{stylesheet}">
 </head>
 <body>
   <div id="{page}-root"></div>
@@ -38,11 +65,11 @@ def render_page_shell(title: str, page: str, *, extra_scripts: tuple[str, ...] =
       }}, true);
     }})();
   </script>
-  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script src="/static/common.js"></script>
+  <script src="{static_url("vendor/react.production.min.js")}"></script>
+  <script src="{static_url("vendor/react-dom.production.min.js")}"></script>
+  <script src="{static_url("common.js")}"></script>
 {scripts}
-  <script src="/static/{page}-app.js"></script>
+  <script src="{page_script}"></script>
 </body>
 </html>
 """
