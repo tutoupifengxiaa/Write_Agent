@@ -1,6 +1,6 @@
 import hashlib
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -443,12 +443,20 @@ class MemoryEmbeddingRepository:
         self.session.refresh(row)
         return row
 
-    def list_for_book(self, book_id: str) -> list[MemoryEmbedding]:
+    def list_for_book(
+        self, book_id: str, *, source_keys: list[tuple[str, str]] | None = None,
+    ) -> list[MemoryEmbedding]:
         statement = (
             select(MemoryEmbedding)
             .where(MemoryEmbedding.book_id == book_id)
             .order_by(MemoryEmbedding.source_type.asc(), MemoryEmbedding.source_id.asc())
         )
+        if source_keys is not None:
+            if not source_keys:
+                return []
+            statement = statement.where(
+                tuple_(MemoryEmbedding.source_type, MemoryEmbedding.source_id).in_(source_keys)
+            )
         return list(self.session.scalars(statement))
 
     def _find(

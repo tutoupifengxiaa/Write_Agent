@@ -1,5 +1,7 @@
-from app.application import WriteAgentApplication
+from types import SimpleNamespace
+
+from app.application import build_web_app
 from app.config import settings
 
-application = WriteAgentApplication.from_settings(settings)
-app = application.fastapi_app
+app = build_web_app(settings)
+application = SimpleNamespace(fastapi_app=app)

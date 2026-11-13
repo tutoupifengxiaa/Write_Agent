@@ -12,6 +12,7 @@ from app.agents.persister import persist_draft_chapter, persist_review_candidate
 from app.agents.context_builder import build_chapter_context_from_memory
 from app.db.repositories import ChapterRepository
 from app.api.dependencies import get_session
+from app.services.llm_client import LLMConfigurationError
 from sqlalchemy.orm import Session
 
 from app.ui.creation_page import render_creation_page
@@ -157,26 +158,12 @@ def generate_chapter(
 
     try:
         result = writer(_build_writer_context(payload, session=session, request=request))
-    except ValueError as exc:
-        if str(exc) == "OPENAI_API_KEY is required":
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        raise
-    except httpx.HTTPStatusError as exc:
-        status_code = exc.response.status_code
-        if 500 <= status_code < 600:
-            raise HTTPException(
-                status_code=502,
-                detail=f"模型服务暂时不可用：{status_code} {exc.response.reason_phrase}",
-            ) from exc
-        raise HTTPException(
-            status_code=502,
-            detail=f"模型服务请求失败：{status_code} {exc.response.reason_phrase}",
-        ) from exc
-    except httpx.ReadTimeout as exc:
-        raise HTTPException(
-            status_code=504,
-            detail="模型服务响应超时，请稍后重试",
-        ) from exc
+    except Exception as exc:
+        mapped = _map_llm_error(exc)
+        if mapped is None:
+            raise
+        status_code, detail = mapped
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
     return CreationGenerateResponse(
         title=result.get("title") or payload.chapter_title,
@@ -194,7 +181,7 @@ def generate_chapter_stream(
 ) -> StreamingResponse:
     writer = getattr(request.app.state, "creation_writer", None)
     stream_writer = getattr(request.app.state, "creation_stream_writer", None)
-    if writer is None:
+    if writer is None and stream_writer is None:
         raise HTTPException(status_code=503, detail="creation writer is not configured")
 
     return StreamingResponse(
@@ -258,26 +245,14 @@ def _stream_chapter_events(
     yield _sse_event("status", {"stage": "started"})
     try:
         if stream_writer is not None:
-            yielded_done = False
-            yielded_title = False
-            yielded_summary = False
             yield _sse_event("title", {"value": fallback_title})
-            yielded_title = True
             yield _sse_event("status", {"stage": "writing"})
             for item in stream_writer(context):
-                event = item.get("event")
-                data = item.get("data", {})
-                if event == "title":
-                    yielded_title = True
-                if event == "summary":
-                    yielded_summary = True
-                if event == "done":
-                    yielded_done = True
-                yield _sse_event(event, data)
-            if not yielded_summary:
-                yield _sse_event("summary", {"value": ""})
-            if not yielded_done:
-                yield _sse_event("done", {"ok": True, "state_deltas": []})
+                event = item["event"]
+                yield _sse_event(event, item["data"])
+                if event in {"done", "error"}:
+                    return
+            yield _sse_event("error", {"detail": "模型输出提前结束", "status_code": 502})
             return
         result = writer(context)
         yield _sse_event("title", {"value": result.get("title") or fallback_title})
@@ -286,21 +261,27 @@ def _stream_chapter_events(
             yield _sse_event("delta", {"value": chunk})
         yield _sse_event("summary", {"value": result.get("summary") or ""})
         yield _sse_event("done", {"ok": True, "state_deltas": result.get("state_deltas") or []})
-    except ValueError as exc:
-        detail = str(exc)
-        if detail == "OPENAI_API_KEY is required":
-            yield _sse_event("error", {"detail": detail, "status_code": 503})
-            return
-        raise
-    except httpx.ReadTimeout:
-        yield _sse_event("error", {"detail": "模型服务响应超时，请稍后重试", "status_code": 504})
-    except httpx.HTTPStatusError as exc:
+    except Exception as exc:
+        mapped = _map_llm_error(exc)
+        if mapped is None:
+            raise
+        status_code, detail = mapped
+        yield _sse_event("error", {"detail": detail, "status_code": status_code})
+
+
+def _map_llm_error(exc: Exception) -> tuple[int, str] | None:
+    if isinstance(exc, LLMConfigurationError):
+        return 503, str(exc)
+    if isinstance(exc, httpx.ReadTimeout):
+        return 504, "模型服务响应超时，请稍后重试"
+    if isinstance(exc, (httpx.ConnectError, httpx.RemoteProtocolError)):
+        return 502, "模型服务暂时不可用，请稍后重试"
+    if isinstance(exc, httpx.HTTPStatusError):
         status_code = exc.response.status_code
         if 500 <= status_code < 600:
-            detail = f"模型服务暂时不可用：{status_code} {exc.response.reason_phrase}"
-        else:
-            detail = f"模型服务请求失败：{status_code} {exc.response.reason_phrase}"
-        yield _sse_event("error", {"detail": detail, "status_code": 502})
+            return 502, f"模型服务暂时不可用：{status_code} {exc.response.reason_phrase}"
+        return 502, f"模型服务请求失败：{status_code} {exc.response.reason_phrase}"
+    return None
 
 
 def _iter_content_chunks(content: str) -> Iterable[str]:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.models import (
     Book,
@@ -26,6 +26,8 @@ SOURCE_WEIGHTS = {
     "story_arc": 0.85,
     "book_outline": 0.8,
 }
+RECENT_CHAPTER_WINDOW = 32
+MAX_CANDIDATES_PER_TYPE = 64
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ def collect_memory_sources(
     session,
     book_id: str,
     target_chapter_number: int,
+    for_retrieval: bool = False,
 ) -> list[MemorySource]:
     sources: list[MemorySource] = []
     book = session.scalar(select(Book).where(Book.id == book_id))
@@ -58,7 +61,7 @@ def collect_memory_sources(
             )
         )
 
-    version_rows = session.execute(
+    versions = (
         select(ChapterVersion, Chapter)
         .join(Chapter, Chapter.id == ChapterVersion.chapter_id)
         .where(Chapter.book_id == book_id)
@@ -66,9 +69,13 @@ def collect_memory_sources(
         .where(ChapterVersion.id == Chapter.approved_version_id)
         .where(ChapterVersion.source == "approved")
         .where(ChapterVersion.summary.is_not(None))
-        .order_by(Chapter.chapter_number.asc(), ChapterVersion.id.asc())
-    ).all()
-    for version, chapter in version_rows:
+    )
+    if for_retrieval:
+        versions = versions.where(Chapter.chapter_number >= target_chapter_number - RECENT_CHAPTER_WINDOW)
+        versions = versions.order_by(Chapter.chapter_number.desc(), ChapterVersion.id).limit(MAX_CANDIDATES_PER_TYPE)
+    else:
+        versions = versions.order_by(Chapter.chapter_number, ChapterVersion.id)
+    for version, chapter in session.execute(versions):
         sources.append(
             MemorySource(
                 book_id,
@@ -79,12 +86,12 @@ def collect_memory_sources(
             )
         )
 
-    arcs = session.scalars(
-        select(StoryArc)
-        .where(StoryArc.book_id == book_id)
-        .order_by(StoryArc.chapter_start.asc(), StoryArc.id.asc())
-    )
-    for arc in arcs:
+    arcs = select(StoryArc).where(StoryArc.book_id == book_id)
+    if for_retrieval:
+        arcs = arcs.order_by(StoryArc.chapter_start.desc(), StoryArc.id).limit(MAX_CANDIDATES_PER_TYPE)
+    else:
+        arcs = arcs.order_by(StoryArc.chapter_start, StoryArc.id)
+    for arc in session.scalars(arcs):
         text = json.dumps(
             {"stage_goal": arc.stage_goal, "outline": arc.outline or {}},
             ensure_ascii=False,
@@ -92,16 +99,29 @@ def collect_memory_sources(
         )
         sources.append(MemorySource(book_id, "story_arc", arc.id, None, text))
 
-    snapshot_rows = session.execute(
+    snapshots = (
         select(CharacterSnapshot, Character, Chapter)
         .join(Character, Character.id == CharacterSnapshot.character_id)
         .join(Chapter, Chapter.id == CharacterSnapshot.chapter_id)
         .where(Character.book_id == book_id)
         .where(Chapter.book_id == book_id)
         .where(Chapter.chapter_number < target_chapter_number)
-        .order_by(Chapter.chapter_number.asc(), CharacterSnapshot.id.asc())
-    ).all()
-    for snapshot, character, chapter in snapshot_rows:
+    )
+    if for_retrieval:
+        # Keep every character's latest state; a character absent for many chapters must not drop out.
+        snapshot_rank = func.row_number().over(
+            partition_by=CharacterSnapshot.character_id,
+            order_by=(Chapter.chapter_number.desc(), CharacterSnapshot.id.desc()),
+        ).label("snapshot_rank")
+        latest = snapshots.with_only_columns(CharacterSnapshot.id, snapshot_rank).subquery()
+        snapshots = (
+            snapshots.join(latest, latest.c.id == CharacterSnapshot.id)
+            .where(latest.c.snapshot_rank == 1)
+            .order_by(Chapter.chapter_number.desc(), CharacterSnapshot.id)
+        )
+    else:
+        snapshots = snapshots.order_by(Chapter.chapter_number, CharacterSnapshot.id)
+    for snapshot, character, chapter in session.execute(snapshots):
         text = json.dumps(
             {"name": character.name, "state": snapshot.state},
             ensure_ascii=False,
@@ -117,7 +137,7 @@ def collect_memory_sources(
             )
         )
 
-    event_rows = session.execute(
+    events = (
         select(ContinuityEvent, Chapter)
         .join(Chapter, Chapter.id == ContinuityEvent.chapter_id)
         .join(ChapterVersion, ChapterVersion.id == Chapter.approved_version_id)
@@ -126,9 +146,13 @@ def collect_memory_sources(
         .where(ContinuityEvent.chapter_version_id == Chapter.approved_version_id)
         .where(Chapter.book_id == book_id)
         .where(Chapter.chapter_number < target_chapter_number)
-        .order_by(Chapter.chapter_number.asc(), ContinuityEvent.id.asc())
-    ).all()
-    for event, chapter in event_rows:
+    )
+    if for_retrieval:
+        events = events.where(Chapter.chapter_number >= target_chapter_number - RECENT_CHAPTER_WINDOW)
+        events = events.order_by(Chapter.chapter_number.desc(), ContinuityEvent.id).limit(MAX_CANDIDATES_PER_TYPE)
+    else:
+        events = events.order_by(Chapter.chapter_number, ContinuityEvent.id)
+    for event, chapter in session.execute(events):
         text = json.dumps(event.delta, ensure_ascii=False, sort_keys=True)
         sources.append(
             MemorySource(
@@ -151,16 +175,29 @@ def refresh_memory_index(
     embedding_client,
     model_name: str,
     expected_dimensions: int | None = None,
+    for_retrieval: bool = False,
 ) -> list[MemoryEmbedding]:
     sources = collect_memory_sources(
         session=session,
         book_id=book_id,
         target_chapter_number=target_chapter_number,
+        for_retrieval=for_retrieval,
     )
     repo = MemoryEmbeddingRepository(session)
+    source_texts = {(source.source_type, source.source_id): source.text for source in sources}
+    source_keys = list(source_texts) if for_retrieval else None
+
+    def current_candidate(row: MemoryEmbedding) -> bool:
+        return (
+            row.source_text == source_texts[(row.source_type, row.source_id)]
+            and row.model == model_name
+            and (expected_dimensions is None or row.dimensions == expected_dimensions)
+        )
+
     cached_rows = {
         (row.source_type, row.source_id): row
-        for row in repo.list_for_book(book_id)
+        for row in repo.list_for_book(book_id, source_keys=source_keys)
+        if not for_retrieval or current_candidate(row)
     }
     changed_sources = [
         source
@@ -214,12 +251,12 @@ def refresh_memory_index(
             vector=vector,
         )
     session.flush()
-    allowed_keys = {(source.source_type, source.source_id) for source in sources}
-    return [
-        row
-        for row in repo.list_for_book(book_id)
-        if (row.source_type, row.source_id) in allowed_keys
-    ]
+    rows = repo.list_for_book(book_id, source_keys=source_keys)
+    if for_retrieval:
+        # Previous concurrent refreshes may have left several rows for a source.
+        distinct = {(row.source_type, row.source_id): row for row in rows if current_candidate(row)}
+        return list(distinct.values())
+    return [row for row in rows if (row.source_type, row.source_id) in source_texts]
 
 
 def recency_weight(
@@ -256,6 +293,7 @@ def retrieve_memory_evidence(
                 embedding_client=embedding_client,
                 model_name=model_name,
                 expected_dimensions=len(query_vector),
+                for_retrieval=True,
             )
             return _rank_memory_rows(
                 rows=rows,
@@ -285,6 +323,7 @@ def retrieve_memory_evidence(
         embedding_client=fallback_client,
         model_name="keyword-hash",
         expected_dimensions=len(query_vector),
+        for_retrieval=True,
     )
     return _rank_memory_rows(
         rows=rows,

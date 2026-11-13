@@ -3,9 +3,43 @@ from __future__ import annotations
 import json
 import time
 from abc import ABC, abstractmethod
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
+
+
+class LLMConfigurationError(ValueError):
+    pass
+
+
+def _validate_configuration(api_key: str, base_url: str, model: str, model_field: str) -> None:
+    for field, value in (("OPENAI_API_KEY", api_key), ("OPENAI_BASE_URL", base_url), (model_field, model)):
+        if not value or not value.strip():
+            raise LLMConfigurationError(f"{field} is required")
+
+
+def validate_worker_settings(settings: Any) -> None:
+    api_key = getattr(settings, "openai_api_key", "")
+    base_url = getattr(settings, "openai_base_url", "")
+    _validate_configuration(api_key, base_url, getattr(settings, "openai_model", ""), "OPENAI_MODEL")
+    _validate_configuration(api_key, base_url, getattr(settings, "openai_review_model", ""), "OPENAI_REVIEW_MODEL")
+
+
+def _retry_after(error: httpx.HTTPError) -> float | None:
+    if not isinstance(error, httpx.HTTPStatusError) or error.response.status_code != 429:
+        return None
+    value = error.response.headers.get("Retry-After", "").strip()
+    if value.isascii() and value.isdigit():
+        return min(float(value), 30.0)
+    try:
+        date = parsedate_to_datetime(value)
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=timezone.utc)
+        return min(max(date.timestamp() - time.time(), 0.0), 30.0)
+    except (ValueError, TypeError, OverflowError, OSError):
+        return None
 
 
 class LLMClient(ABC):
@@ -68,96 +102,58 @@ class OpenAIResponsesLLMClient(LLMClient):
             timeout_seconds=getattr(settings, "openai_timeout_seconds", 60.0),
         )
 
-    def generate_json(self, prompt: str) -> dict:
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY is required")
+    def validate_configuration(self) -> None:
+        _validate_configuration(self.api_key, self.base_url, self.model, "OPENAI_MODEL")
 
-        response = self._post_with_retry(
-            prompt,
-            model=self.model,
-            reasoning_effort=self.reasoning_effort,
-        )
-        return self._parse_json_response(response.json())
+    def generate_json(self, prompt: str) -> dict:
+        self.validate_configuration()
+        return next(self._request_with_retry(prompt, reasoning_effort=self.reasoning_effort, stream=False))
 
     def stream_text(self, prompt: str, *, reasoning_effort: str | None = None):
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY is required")
+        self.validate_configuration()
+        effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
+        yield from self._request_with_retry(prompt, reasoning_effort=effort, stream=True)
 
-        with self._client.stream(
-            "POST",
-            f"{self.base_url}/responses",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json=self._build_payload(
-                prompt,
-                model=self.model,
-                reasoning_effort=reasoning_effort if reasoning_effort is not None else self.reasoning_effort,
-                stream=True,
-            ),
-            timeout=self._stream_timeout,
-        ) as response:
-            response.raise_for_status()
-            for event in self._iter_sse_events(response):
-                if event.get("type") == "response.output_text.delta":
-                    delta = event.get("delta")
-                    if delta:
-                        yield delta
+    def _request_with_retry(self, prompt: str, *, reasoning_effort: str, stream: bool):
+        models = [(self.model, reasoning_effort)]
+        fallback = (self.fallback_model, self._resolve_fallback_reasoning_effort())
+        if self.fallback_model and fallback != models[0]:
+            models.append(fallback)
 
-    def _post_with_retry(
-        self,
-        prompt: str,
-        *,
-        model: str,
-        reasoning_effort: str,
-    ) -> httpx.Response:
-        last_error: httpx.HTTPStatusError | None = None
-        last_timeout: httpx.ReadTimeout | None = None
-        for attempt in range(self._max_retries + 1):
-            try:
-                response = self._client.post(
-                    f"{self.base_url}/responses",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=self._build_payload(
-                        prompt,
-                        model=model,
-                        reasoning_effort=reasoning_effort,
-                    ),
-                )
-                response.raise_for_status()
-                return response
-            except httpx.ReadTimeout as exc:
-                if attempt >= self._max_retries:
-                    last_timeout = exc
-                    break
-                last_timeout = exc
-                time.sleep(0.6 * (attempt + 1))
-            except httpx.HTTPStatusError as exc:
-                if not self._should_retry(exc.response.status_code) or attempt >= self._max_retries:
-                    last_error = exc
-                    break
-                last_error = exc
-                time.sleep(0.6 * (attempt + 1))
-        if self._should_use_fallback(last_error, last_timeout):
-            fallback_reasoning_effort = self._resolve_fallback_reasoning_effort()
-            if model != self.fallback_model or reasoning_effort != fallback_reasoning_effort:
-                return self._post_with_retry(
-                    prompt,
-                    model=self.fallback_model,
-                    reasoning_effort=fallback_reasoning_effort,
-                )
-        if last_error is not None:
-            raise last_error
-        if last_timeout is not None:
-            raise last_timeout
-        raise RuntimeError("unreachable")
-
-    def _should_retry(self, status_code: int) -> bool:
-        return status_code in {502, 503, 504}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        url = f"{self.base_url}/responses"
+        for index, (model, effort) in enumerate(models):
+            payload = self._build_payload(prompt, model=model, reasoning_effort=effort, stream=stream)
+            for attempt in range(self._max_retries + 1):
+                emitted = False
+                try:
+                    if stream:
+                        with self._client.stream(
+                            "POST", url, headers=headers, json=payload, timeout=self._stream_timeout
+                        ) as response:
+                            response.raise_for_status()
+                            for event in self._iter_sse_events(response):
+                                if event.get("type") == "response.output_text.delta" and event.get("delta"):
+                                    emitted = True
+                                    yield event["delta"]
+                    else:
+                        response = self._client.post(url, headers=headers, json=payload)
+                        response.raise_for_status()
+                        yield self._parse_json_response(response.json())
+                    return
+                except (
+                    httpx.ReadTimeout, httpx.ConnectError, httpx.RemoteProtocolError, httpx.HTTPStatusError
+                ) as exc:
+                    if emitted:
+                        raise
+                    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code not in {429, 502, 503, 504}:
+                        raise
+                    last_attempt = attempt == self._max_retries
+                    if last_attempt and index == len(models) - 1:
+                        raise
+                    delay = _retry_after(exc)
+                    if delay is not None or not last_attempt:
+                        time.sleep(delay if delay is not None else 0.6 * (attempt + 1))
 
     def _build_payload(
         self,
@@ -183,19 +179,6 @@ class OpenAIResponsesLLMClient(LLMClient):
         if self.fallback_reasoning_effort:
             return self.fallback_reasoning_effort
         return self.reasoning_effort
-
-    def _should_use_fallback(
-        self,
-        error: httpx.HTTPStatusError | None,
-        timeout_error: httpx.ReadTimeout | None = None,
-    ) -> bool:
-        if not self.fallback_model:
-            return False
-        if timeout_error is not None:
-            return True
-        if error is None:
-            return False
-        return self._should_retry(error.response.status_code)
 
     def _parse_json_response(self, body: dict) -> dict:
         text = self._extract_output_text(body)

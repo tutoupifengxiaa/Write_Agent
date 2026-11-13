@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 
 from app.db.models import Chapter, ChapterVersion, PublishJob
+from app.services.llm_client import LLMConfigurationError
 from app.orchestrator.chapter_workflow import ChapterWorkflow
 from app.orchestrator.retry_policy import classify_error, max_retries
 from app.orchestrator.task_claims import claim_task, ready_task, utc_now
@@ -60,6 +61,7 @@ class Scheduler:
         *,
         excluded_publish_job_ids: set[str] | None = None,
         excluded_chapter_ids: set[str] | None = None,
+        chapters_per_book: dict[str, int] | None = None,
     ) -> dict:
         now = utc_now()
         self.session.execute(update(Chapter).where(
@@ -91,15 +93,23 @@ class Scheduler:
             chapter_statement = chapter_statement.where(
                 Chapter.id.not_in(excluded_chapter_ids)
             )
+        if chapters_per_book:
+            chapter_statement = chapter_statement.order_by(
+                case(chapters_per_book, value=Chapter.book_id, else_=0)
+            )
         chapter = self.session.scalar(
-            chapter_statement.order_by(Chapter.chapter_number.asc())
+            chapter_statement.order_by(Chapter.chapter_number, Chapter.id).limit(1)
         )
         if chapter is None:
             self.session.rollback()
             return {"final_status": "idle"}
         chapter_id = chapter.id
+        if chapters_per_book is not None:
+            chapters_per_book[chapter.book_id] = chapters_per_book.get(chapter.book_id, 0) + 1
         try:
             return self.run_once(chapter_id)
+        except LLMConfigurationError:
+            raise
         except Exception as exc:
             self.session.rollback()
             chapter = self.session.get(Chapter, chapter_id)
@@ -113,10 +123,12 @@ class Scheduler:
         results: list[dict] = []
         excluded_publish_job_ids: set[str] = set()
         excluded_chapter_ids: set[str] = set()
+        chapters_per_book: dict[str, int] = {}
         for _ in range(limit):
             result = self.run_next_pending(
                 excluded_publish_job_ids=excluded_publish_job_ids,
                 excluded_chapter_ids=excluded_chapter_ids,
+                chapters_per_book=chapters_per_book,
             )
             if result.get("final_status") == "idle":
                 break

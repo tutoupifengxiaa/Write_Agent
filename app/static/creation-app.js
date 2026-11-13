@@ -1,7 +1,7 @@
 (function () {
   const {createElement: h, useEffect, useRef, useState} = window.React;
   const {fetchJson, requestJson, Navigation, statusLabel} = window.WriteAgentUI;
-  const {parseSseChunk, applyJsonSnapshot, looksLikeJsonChunk} = window.CreationStream;
+  const {parseSseChunk} = window.CreationStream;
   const {renderRetrievalAudit} = window.CreationPanels;
   const EMPTY_FORM = {chapterTitle: "", chapterGoal: "", mustInclude: "", mustAvoid: "", styleRules: "", targetWords: 2500};
   const normalizeLines = value => Array.isArray(value) ? value.join("\n") : String(value || "");
@@ -132,25 +132,19 @@
       const controller = new AbortController();
       controllerRef.current = controller;
       setBusy("generate");
-      let generated = {draft: "", chapterTitle: form.chapterTitle, summary: "", stateDeltas: []};
-      let rawJson = "", jsonMode = false, completed = false, reader;
+      const generated = {draft: "", chapterTitle: form.chapterTitle, summary: "", stateDeltas: []};
+      let completed = false, reader;
       setPreview(generated);
       notify("正在生成，原稿已保留。可随时停止。");
       const applyEvent = (event, payload) => {
         if (controller.signal.aborted) return;
         if (event === "error") throw new Error(payload.detail || "生成失败");
         if (event === "title") generated.chapterTitle = payload.value || generated.chapterTitle;
-        if (event === "summary" && (!jsonMode || payload.value)) generated.summary = payload.value || "";
-        if (event === "delta") {
-          const value = payload.value || "";
-          if (jsonMode || (!generated.draft && looksLikeJsonChunk(value))) {
-            jsonMode = true; rawJson += value;
-            generated = applyJsonSnapshot(rawJson, generated);
-          } else generated.draft += value;
-        }
+        if (event === "summary") generated.summary = payload.value || "";
+        if (event === "delta") generated.draft += payload.value || "";
         if (event === "done") {
           completed = payload.ok !== false;
-          if (Array.isArray(payload.state_deltas) && (!jsonMode || payload.state_deltas.length)) generated.stateDeltas = payload.state_deltas;
+          if (Array.isArray(payload.state_deltas)) generated.stateDeltas = payload.state_deltas;
         }
         setPreview({...generated});
       };
@@ -178,13 +172,6 @@
         buffer += decoder.decode();
         if (buffer.trim()) parseSseChunk(buffer + "\n\n", applyEvent);
         if (controller.signal.aborted) throw new DOMException("Stopped", "AbortError");
-        if (jsonMode) {
-          let result;
-          try { result = JSON.parse(rawJson); }
-          catch (_) { throw new Error("生成的 JSON 未完整结束，请重试"); }
-          if (!result || typeof result.content !== "string") throw new Error("生成结果缺少正文");
-          generated = applyJsonSnapshot(rawJson, generated);
-        }
         if (!completed || !generated.draft.trim()) throw new Error("生成未完整结束，请重试");
         setDraft(generated.draft);
         setSummary(generated.summary);

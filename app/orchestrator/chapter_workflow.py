@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from app.agents.context_builder import build_chapter_context_from_memory
 from app.agents.persister import persist_approved_chapter, persist_review_candidate
 from app.db.models import Chapter
+from app.services.llm_client import LLMConfigurationError
 from app.orchestrator.retry_policy import classify_error, max_retries
 from app.orchestrator.task_claims import LEASE_SECONDS, claim_task, utc_now
 from app.orchestrator.state_machine import (
@@ -80,6 +81,18 @@ class ChapterWorkflow:
             return {"final_status": "skipped", "item_type": "chapter", "item_id": chapter_id}
         try:
             result = self.graph.invoke({"chapter_id": chapter_id, "claim_token": token})
+        except LLMConfigurationError:
+            self.session.rollback()
+            self.session.execute(update(Chapter).where(
+                Chapter.id == chapter_id,
+                Chapter.claim_token == token,
+                Chapter.status == "draft_planned",
+            ).values(
+                claim_token=None, lease_expires_at=None,
+                attempt_count=Chapter.attempt_count - 1,
+            ))
+            self.session.commit()
+            raise
         except StaleGenerationError:
             self.session.rollback()
             self.session.execute(update(Chapter).where(

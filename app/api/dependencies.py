@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
+from fastapi import Request
 from sqlalchemy.orm import Session
 
-from app.db.base import SessionLocal
 
-
-def get_session() -> Generator[Session, None, None]:
-    session = SessionLocal()
+def get_session(request: Request) -> Generator[Session, None, None]:
+    session = request.app.state.session_factory()
     try:
         yield session
     finally:

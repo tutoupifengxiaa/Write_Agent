@@ -9,9 +9,10 @@ import webbrowser
 
 import uvicorn
 
-from app.application import WriteAgentApplication
+from app.application import build_worker, initialize_database
 from app.config import settings
 from app.orchestrator.scheduler_runner import DEFAULT_MAX_CONSECUTIVE_FAILURES, run_scheduler_loop
+from app.services.llm_client import LLMConfigurationError, validate_worker_settings
 
 logger = logging.getLogger(__name__)
 WORKER_LOG_FIELDS = (
@@ -83,7 +84,12 @@ def run_worker(
 
     application = None
     try:
-        application = WriteAgentApplication.from_settings(settings)
+        try:
+            validate_worker_settings(settings)
+        except LLMConfigurationError as exc:
+            logger.error("worker.configuration_error %s", exc)
+            return 1
+        application = build_worker(settings)
         _log_worker_event(
             "worker.start",
             batch_limit=resolved_batch_limit,
@@ -119,6 +125,7 @@ def run_worker(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.launch")
     subparsers = parser.add_subparsers(dest="mode")
+    subparsers.add_parser("migrate")
 
     web_parser = subparsers.add_parser("web")
     web_parser.add_argument("--host", default="127.0.0.1")
@@ -149,6 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     parsed = parser.parse_args(args)
     mode = parsed.mode or "web"
 
+    if mode == "migrate":
+        initialize_database()
+        return 0
     if mode == "web":
         run_web(host=parsed.host, port=parsed.port)
         return 0
