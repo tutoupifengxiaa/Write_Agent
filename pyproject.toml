@@ -24,7 +24,7 @@ write-agent = "app.launch:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=9.2.0",
-    "ruff",
+    "ruff>=0.16,<0.17",
 ]
 publish = ["playwright>=1.65.1"]
 postgres = ["psycopg[binary]>=3.3.9"]
@@ -45,3 +45,7 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
 ignore = ["E501"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency injection uses Depends(...) as a default value by design.
+extend-immutable-calls = ["fastapi.Depends"]

@@ -61,7 +61,7 @@ def get_hotlists() -> dict[str, Any]:
 @router.get("/trends/insights")
 def get_trend_insights(
     capture_id: str | None = None,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     if capture_id is None:
         insights = build_trend_insights(fetch_hotlists())
@@ -78,7 +78,7 @@ def get_trend_insights(
 
 @router.post("/trends/captures", status_code=201)
 def create_trend_capture(
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     hotlists = fetch_hotlists()
     capture_id = f"capture_{uuid4().hex}"
@@ -112,7 +112,7 @@ def create_trend_capture(
 def list_trend_snapshots(
     provider: str | None = None,
     capture_id: str | None = None,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> list[dict[str, Any]]:
     rows = TrendSnapshotRepository(session).list_snapshots(
         provider=provider,
@@ -124,7 +124,7 @@ def list_trend_snapshots(
 @router.get("/trends/snapshots/{snapshot_id}")
 def get_trend_snapshot(
     snapshot_id: str,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     row = TrendSnapshotRepository(session).get_snapshot(snapshot_id)
     if row is None:
@@ -136,7 +136,7 @@ def get_trend_snapshot(
 def generate_direction(
     payload: DirectionGenerateRequest,
     request: Request,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     generator = getattr(request.app.state, "direction_generator", None)
     if generator is None:

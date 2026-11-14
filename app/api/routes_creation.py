@@ -78,7 +78,7 @@ def ops_page() -> HTMLResponse:
 @router.post("/api/creation/save")
 def save_chapter_draft(
     payload: CreationSaveRequest,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     if payload.create_publish_job:
         raise HTTPException(status_code=409, detail="请先提交审核，批准后创建发布任务")
@@ -107,7 +107,7 @@ def save_chapter_draft(
 @router.post("/api/creation/review")
 def mark_chapter_for_manual_review(
     payload: CreationManualReviewRequest,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     if payload.review_action not in {"review_pending", "revision_pending"}:
         raise HTTPException(status_code=400, detail="invalid review action")
@@ -148,7 +148,7 @@ def mark_chapter_for_manual_review(
 def generate_chapter(
     payload: CreationGenerateRequest,
     request: Request,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> CreationGenerateResponse:
     writer = getattr(request.app.state, "creation_writer", None)
     if writer is None:
@@ -175,7 +175,7 @@ def generate_chapter(
 def generate_chapter_stream(
     payload: CreationGenerateRequest,
     request: Request,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> StreamingResponse:
     writer = getattr(request.app.state, "creation_writer", None)
     stream_writer = getattr(request.app.state, "creation_stream_writer", None)

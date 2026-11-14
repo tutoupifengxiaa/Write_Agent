@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get("/jobs/health")
-def jobs_health(session: Session = Depends(get_session)) -> dict[str, int | str]:  # noqa: B008
+def jobs_health(session: Session = Depends(get_session)) -> dict[str, int | str]:
     pending_chapters = session.scalar(
         select(func.count()).select_from(Chapter).where(Chapter.status == "draft_planned")
     )
@@ -31,7 +31,7 @@ def jobs_health(session: Session = Depends(get_session)) -> dict[str, int | str]
 
 @router.get("/jobs")
 def list_jobs(
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
     status: str | None = None,
     chapter_id: str | None = None,
     book_id: str | None = None,
@@ -60,14 +60,14 @@ def list_jobs(
 
 
 @router.get("/jobs/runs/summary")
-def get_scheduler_run_summary(session: Session = Depends(get_session)) -> dict[str, int]:  # noqa: B008
+def get_scheduler_run_summary(session: Session = Depends(get_session)) -> dict[str, int]:
     repo = SchedulerRunRepository(session)
     return repo.get_summary()
 
 
 @router.get("/jobs/runs/failure-clusters")
 def list_scheduler_run_failure_clusters(
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> list[dict[str, int | str]]:
     repo = SchedulerRunRepository(session)
     return repo.get_failure_clusters()
@@ -75,7 +75,7 @@ def list_scheduler_run_failure_clusters(
 
 @router.get("/jobs/runs")
 def list_scheduler_runs(
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
     status: str | None = None,
     limit: int | None = Query(default=None, ge=1),
     offset: int = Query(default=0, ge=0),
@@ -99,7 +99,7 @@ def list_scheduler_runs(
 
 
 @router.get("/jobs/runs/{run_id}")
-def get_scheduler_run(run_id: str, session: Session = Depends(get_session)) -> dict:  # noqa: B008
+def get_scheduler_run(run_id: str, session: Session = Depends(get_session)) -> dict:
     repo = SchedulerRunRepository(session)
     run = repo.get_run(run_id)
     if run is None:
@@ -118,7 +118,7 @@ def get_scheduler_run(run_id: str, session: Session = Depends(get_session)) -> d
 
 
 @router.get("/jobs/{job_id}")
-def get_job(job_id: str, session: Session = Depends(get_session)) -> dict:  # noqa: B008
+def get_job(job_id: str, session: Session = Depends(get_session)) -> dict:
     repo = PublishJobRepository(session)
     job = repo.get_job(job_id)
     if job is None:

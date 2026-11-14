@@ -29,7 +29,7 @@ class BookOutlineUpdateRequest(BaseModel):
 
 
 @router.get("/books")
-def list_books(session: Session = Depends(get_session)) -> list[dict]:  # noqa: B008
+def list_books(session: Session = Depends(get_session)) -> list[dict]:
     repo = BookRepository(session)
     books = repo.list_books()
     return [
@@ -47,7 +47,7 @@ def list_books(session: Session = Depends(get_session)) -> list[dict]:  # noqa: 
 @router.post("/books", status_code=201)
 def create_book(
     payload: BookCreateRequest,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> dict:
     repo = BookRepository(session)
     values = payload.model_dump()
@@ -67,7 +67,7 @@ def create_book(
 
 
 @router.get("/books/{book_id}")
-def get_book(book_id: str, session: Session = Depends(get_session)) -> dict:  # noqa: B008
+def get_book(book_id: str, session: Session = Depends(get_session)) -> dict:
     repo = BookRepository(session)
     book = repo.get_book(book_id)
     if book is None:
@@ -88,7 +88,7 @@ def get_book(book_id: str, session: Session = Depends(get_session)) -> dict:  # 
 def update_book_outline(
     book_id: str,
     payload: BookOutlineUpdateRequest,
-    session: Session = Depends(get_session),  # noqa: B008
+    session: Session = Depends(get_session),
 ) -> dict:
     repo = BookRepository(session)
     if repo.get_book(book_id) is None:
