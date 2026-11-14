@@ -134,7 +134,11 @@ body {
   margin-bottom: 18px;
 }
 
-.radar-toolbar h2 { margin: 0; }
+.radar-toolbar h2 { margin: 0; flex-shrink: 0; }
+.radar-toolbar { flex-wrap: wrap; }
+.radar-toolbar-actions { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--app-gap-inline); }
+.radar-history { display: inline-flex; flex-wrap: wrap; align-items: center; white-space: nowrap; gap: var(--app-gap-inline); font-size: 13px; color: var(--app-muted); }
+.radar-history select { min-height: 38px; max-width: 100%; padding: 6px 10px; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-input-surface); color: var(--app-ink); font: inherit; }
 
 .radar-toolbar .radar-refresh {
   width: auto;

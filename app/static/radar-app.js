@@ -7,7 +7,7 @@
     throw new Error("页面运行资源加载失败，请刷新重试");
   }
 
-  const { useEffect, useState } = ReactLib;
+  const { useEffect, useRef, useState } = ReactLib;
 
   const PROVIDER_LABELS = {
     fanqie: "番茄小说",
@@ -80,6 +80,8 @@
     const [activeProvider, setActiveProvider] = useState("fanqie");
     const [insights, setInsights] = useState(null);
     const [captureId, setCaptureId] = useState("");
+    const [captures, setCaptures] = useState([]);
+    const captureRequest = useRef(0);
     const [selectedItemIds, setSelectedItemIds] = useState([]);
     const [isCapturing, setIsCapturing] = useState(false);
     const [result, setResult] = useState(null);
@@ -91,7 +93,31 @@
       notes: "偏快节奏、强钩子、低门槛阅读",
     });
 
-    function loadCapture() {
+    function loadHistory() {
+      return requestJson("/trends/captures?limit=20")
+        .then(function (rows) { setCaptures(Array.isArray(rows) ? rows : []); })
+        .catch(function () { setCaptures([]); });
+    }
+
+    function showCapture(snapshots, payloadInsights, id) {
+      setHotlists(snapshots.map(function (snapshot) {
+        return Object.assign({}, snapshot, {
+          provider_label: PROVIDER_LABELS[snapshot.provider] || snapshot.provider || "未知平台",
+          items: Array.isArray(snapshot.items) ? snapshot.items : [],
+        });
+      }));
+      setInsights(payloadInsights || null);
+      setCaptureId(id || "");
+      setSelectedItemIds([]);
+      setActiveProvider(function (current) {
+        return snapshots.some(function (snapshot) { return snapshot.provider === current; })
+          ? current : ((snapshots[0] || {}).provider || "fanqie");
+      });
+    }
+
+    // A fresh capture and an older one share the same flow; only the newest request may update the page.
+    function runCapture(load, failure) {
+      const request = ++captureRequest.current;
       setError("");
       setResult(null);
       setCaptureId("");
@@ -99,32 +125,53 @@
       setHotlists([]);
       setInsights(null);
       setIsCapturing(true);
-      return requestJson("/trends/captures", { method: "POST" })
-        .then(function (payload) {
-          const snapshots = Array.isArray(payload.snapshots) ? payload.snapshots : [];
-          setHotlists(snapshots.map(function (snapshot) {
-            return Object.assign({}, snapshot, {
-              provider_label: PROVIDER_LABELS[snapshot.provider] || snapshot.provider || "未知平台",
-              items: Array.isArray(snapshot.items) ? snapshot.items : [],
-            });
-          }));
-          setInsights(payload.insights || null);
-          setCaptureId(payload.capture_id || "");
-          setSelectedItemIds([]);
-          setActiveProvider(function (current) {
-            return snapshots.some(function (snapshot) { return snapshot.provider === current; })
-              ? current : ((snapshots[0] || {}).provider || "fanqie");
-          });
+      return load()
+        .then(function (loaded) {
+          if (request === captureRequest.current) showCapture(loaded.snapshots, loaded.insights, loaded.captureId);
         })
         .catch(function (fetchError) {
-          setError(fetchError.message || "选题雷达加载失败");
+          if (request === captureRequest.current) setError(fetchError.message || failure);
         })
         .finally(function () {
-          setIsCapturing(false);
+          if (request === captureRequest.current) setIsCapturing(false);
         });
     }
 
+    function loadCapture() {
+      return runCapture(function () {
+        // Refresh the history list either way, so older captures stay reachable when a new one fails.
+        const created = requestJson("/trends/captures", { method: "POST" });
+        created.then(function () { return loadHistory(); }, function () { return loadHistory(); });
+        return created.then(function (payload) {
+          return {
+            snapshots: Array.isArray(payload.snapshots) ? payload.snapshots : [],
+            insights: payload.insights, captureId: payload.capture_id,
+          };
+        });
+      }, "选题雷达加载失败");
+    }
+
+    function loadSavedCapture(id) {
+      if (!id || id === captureId) return null;
+      const query = "?capture_id=" + encodeURIComponent(id);
+      return runCapture(function () {
+        return Promise.all([
+          requestJson("/trends/snapshots" + query),
+          requestJson("/trends/insights" + query),
+        ]).then(function (loaded) {
+          return { snapshots: Array.isArray(loaded[0]) ? loaded[0] : [], insights: loaded[1], captureId: id };
+        });
+      }, "历史采集加载失败");
+    }
+
+    function captureOptionLabel(capture) {
+      const providers = capture.providers || [];
+      const succeeded = providers.filter(function (item) { return item.status === "real"; }).length;
+      return captureTime(capture.captured_at) + " · " + succeeded + "/" + providers.length + " 个平台成功";
+    }
+
     useEffect(function () {
+      loadHistory();
       loadCapture();
     }, []);
 
@@ -214,9 +261,27 @@
             { className: "radar-toolbar" },
             ReactLib.createElement("h2", null, "热门榜单"),
             ReactLib.createElement(
-              "button",
-              { className: "radar-button radar-refresh", type: "button", onClick: loadCapture, disabled: isCapturing },
-              isCapturing ? "采集中..." : "刷新采集"
+              "div",
+              { className: "radar-toolbar-actions" },
+              captures.length > 0
+                ? ReactLib.createElement(FormField, {
+                    id: "radar-history", label: "历史采集", wrapped: true, as: "select",
+                    labelClassName: "radar-history", value: captureId,
+                    onValueChange: loadSavedCapture,
+                  },
+                  captureId && !captures.some(function (capture) { return capture.capture_id === captureId; })
+                    ? ReactLib.createElement("option", { value: captureId }, "当前采集")
+                    : null,
+                  !captureId ? ReactLib.createElement("option", { value: "" }, "选择一次采集") : null,
+                  captures.map(function (capture) {
+                    return ReactLib.createElement("option", { key: capture.capture_id, value: capture.capture_id }, captureOptionLabel(capture));
+                  }))
+                : null,
+              ReactLib.createElement(
+                "button",
+                { className: "radar-button radar-refresh", type: "button", onClick: loadCapture, disabled: isCapturing },
+                isCapturing ? "采集中..." : "刷新采集"
+              )
             )
           ),
           ReactLib.createElement(

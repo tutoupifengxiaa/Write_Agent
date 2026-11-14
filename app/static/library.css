@@ -303,6 +303,13 @@ body {
   grid-column: 1 / -1;
 }
 
+.library-hint {
+  margin: 12px 0 0;
+  color: var(--library-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .library-button-row {
   display: flex;
   flex-wrap: wrap;

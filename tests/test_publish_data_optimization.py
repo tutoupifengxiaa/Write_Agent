@@ -204,7 +204,7 @@ function content(node) {
     assert.equal(requests.filter(r => r.url.startsWith('/jobs?book_id=')).length, 2);
     assert(!requests.some(r => r.url.includes('/jobs?chapter_id=')));
     assert.equal(content(nodes(tree).find(n => n.type === 'option' && n.props.value === 'draft_planned')), '待写作');
-    for (const [label, url] of [['新建章节','/chapters'], ['重试发布','/chapters/c2/retry-publish'], ['归档失败','/chapters/c2/archive-publish-failure']]) {
+    for (const [label, url] of [['新建章节','/chapters'], ['按故事线规划','/chapters/plan'], ['重试发布','/chapters/c2/retry-publish'], ['归档失败','/chapters/c2/archive-publish-failure']]) {
       nodes(tree).find(n => n.type === 'button' && content(n) === label).props.onClick();
       const write = requests[requests.length - 1];
       assert.equal(write.url, url);

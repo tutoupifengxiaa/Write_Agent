@@ -603,6 +603,31 @@ class TrendSnapshotRepository:
             select(TrendSnapshot).where(TrendSnapshot.id == snapshot_id)
         )
 
+    def list_captures(self, *, limit: int = 20) -> list[dict]:
+        """Newest captures first, each with per-provider status but without the heavy item lists."""
+        latest = func.max(TrendSnapshot.captured_at).label("captured_at")
+        recent = list(self.session.execute(
+            select(TrendSnapshot.capture_id, latest)
+            .group_by(TrendSnapshot.capture_id)
+            .order_by(latest.desc(), TrendSnapshot.capture_id.desc())
+            .limit(limit)
+        ))
+        if not recent:
+            return []
+        rows = self.session.execute(
+            select(TrendSnapshot.capture_id, TrendSnapshot.provider, TrendSnapshot.status)
+            .where(TrendSnapshot.capture_id.in_([row.capture_id for row in recent]))
+            .order_by(TrendSnapshot.provider.asc())
+        )
+        providers: dict[str, list[dict]] = {}
+        for row in rows:
+            providers.setdefault(row.capture_id, []).append({"provider": row.provider, "status": row.status})
+        return [
+            {"capture_id": row.capture_id, "captured_at": row.captured_at,
+             "providers": providers.get(row.capture_id, [])}
+            for row in recent
+        ]
+
     def list_snapshots(
         self,
         *,

@@ -16,7 +16,9 @@ def plan_next_chapter(
     character_state_hints = []
     for character in character_states or []:
         name = character.get("name", "")
-        mood = (character.get("state") or {}).get("mood", "")
+        state = character.get("state") or {}
+        # Snapshots written by the persister record "latest_change"; older ones may carry "mood".
+        mood = state.get("mood") or state.get("latest_change") or ""
         if name and mood:
             character_state_hints.append(f"{name}:{mood}")
 

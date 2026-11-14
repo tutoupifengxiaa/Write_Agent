@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -106,6 +106,18 @@ def create_trend_capture(
         "snapshots": [_serialize_snapshot(snapshot) for snapshot in snapshots],
         "insights": insights,
     }
+
+
+@router.get("/trends/captures")
+def list_trend_captures(
+    limit: int = Query(default=20, ge=1, le=100),
+    session: Session = Depends(get_session),
+) -> list[dict[str, Any]]:
+    captures = TrendSnapshotRepository(session).list_captures(limit=limit)
+    for capture in captures:
+        captured_at = capture["captured_at"]
+        capture["captured_at"] = captured_at.isoformat() if captured_at else None
+    return captures
 
 
 @router.get("/trends/snapshots")

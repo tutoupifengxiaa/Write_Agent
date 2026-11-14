@@ -47,6 +47,9 @@
       chapterNumber: "",
       title: "",
       objective: "",
+      mustInclude: "",
+      mustAvoid: "",
+      targetWords: "",
     });
 
     useEffect(function () {
@@ -118,35 +121,63 @@
       });
     }
 
-    function handleCreateChapter() {
+    function lines(value) {
+      return String(value || "").split("\n").map(function (item) { return item.trim(); }).filter(Boolean);
+    }
+
+    function submitChapter(url, body, describe, failure) {
       if (!selectedBook) {
         return;
       }
       resetFeedback();
       setIsSubmitting(true);
-      requestJson("/chapters", {
+      requestJson(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(Object.assign({
           book_id: selectedBook.id,
           chapter_number: Number(chapterForm.chapterNumber || 0),
           title: chapterForm.title,
-          goal: { objective: chapterForm.objective },
-        }),
+        }, body)),
       })
-        .then(function () {
-          setSuccess("已创建新章节");
+        .then(function (created) {
+          setSuccess(describe(created || {}));
           setChapterForm(function (current) {
-            return Object.assign({}, current, { title: "", objective: "" });
+            return Object.assign({}, current, { title: "", objective: "", mustInclude: "", mustAvoid: "" });
           });
           return loadBook(selectedBook.id);
         })
         .catch(function (requestError) {
-          setError(requestError.message || "章节创建失败");
+          setError(requestError.message || failure);
         })
         .finally(function () {
           setIsSubmitting(false);
         });
+    }
+
+    function chapterRequirements() {
+      const words = Number(chapterForm.targetWords || 0);
+      return Object.assign(
+        { must_include: lines(chapterForm.mustInclude), must_avoid: lines(chapterForm.mustAvoid) },
+        words > 0 ? { target_words: words } : {}
+      );
+    }
+
+    function handleCreateChapter() {
+      submitChapter("/chapters", {
+        goal: Object.assign({ objective: chapterForm.objective }, chapterRequirements()),
+      }, function () { return "已创建新章节"; }, "章节创建失败");
+    }
+
+    // The planner folds the book's story arcs and latest character states into the chapter goal.
+    function handlePlanChapter() {
+      submitChapter("/chapters/plan", Object.assign({ chapter_goal: chapterForm.objective }, chapterRequirements()),
+        function (created) {
+          const signals = (created.goal || {}).context_signals || {};
+          const arcs = (signals.story_arc_goals || []).length;
+          const characters = (signals.character_state_hints || []).length;
+          return "已规划第 " + created.chapter_number + " 章：参考了 " + arcs + " 条故事线、" + characters + " 个角色的最新状态";
+        }, "章节规划失败");
     }
 
     function handleRetryPublish(chapterId) {
@@ -699,14 +730,33 @@
               ReactLib.createElement(FormField, {
                 label: "章节目标", wrapped: true, labelClassName: "library-form-wide", as: "textarea", value: chapterForm.objective,
                 onValueChange: value => updateChapterForm("objective", value),
+              }),
+              ReactLib.createElement(FormField, {
+                label: "必须写到（每行一条，可不填）", wrapped: true, labelClassName: "library-form-wide", as: "textarea", value: chapterForm.mustInclude,
+                onValueChange: value => updateChapterForm("mustInclude", value),
+              }),
+              ReactLib.createElement(FormField, {
+                label: "必须避开（每行一条，可不填）", wrapped: true, labelClassName: "library-form-wide", as: "textarea", value: chapterForm.mustAvoid,
+                onValueChange: value => updateChapterForm("mustAvoid", value),
+              }),
+              ReactLib.createElement(FormField, {
+                label: "目标字数（默认 2500）", wrapped: true, type: "number", min: 1, value: chapterForm.targetWords,
+                onValueChange: value => updateChapterForm("targetWords", value),
               })
             ),
+            ReactLib.createElement("p", { className: "library-hint" },
+              "「按故事线规划」会把覆盖这一章的故事线、前面章节里角色的最新状态一起写进章节目标；「新建章节」只按你填写的内容创建。"),
             ReactLib.createElement(
               "div",
               { className: "library-button-row" },
               ReactLib.createElement(
                 "button",
-                { type: "button", onClick: handleCreateChapter, disabled: isSubmitting || !selectedBook },
+                { type: "button", onClick: handlePlanChapter, disabled: isSubmitting || !selectedBook },
+                "按故事线规划"
+              ),
+              ReactLib.createElement(
+                "button",
+                { type: "button", className: "library-secondary-button", onClick: handleCreateChapter, disabled: isSubmitting || !selectedBook },
                 "新建章节"
               )
             )

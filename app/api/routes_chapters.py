@@ -9,10 +9,11 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.agents.planner import plan_next_chapter
+from app.agents.story_arcs import arcs_covering
 from app.api.dependencies import get_session
 from app.db.deletion import delete_chapters, has_active_work
 from app.db.models import Chapter, ChapterVersion, PublishJob
-from app.db.repositories import BookRepository, ChapterRepository, PublishJobRepository
+from app.db.repositories import BookRepository, ChapterRepository, MemoryRepository, PublishJobRepository
 from app.ui.chapter_detail_page import render_chapter_detail_page
 
 router = APIRouter()
@@ -66,15 +67,25 @@ def plan_chapter(
 ) -> dict[str, object]:
     book_repo = BookRepository(session)
     chapter_repo = ChapterRepository(session)
-    context = book_repo.get_next_chapter_context(payload.book_id)
+    if book_repo.get_book(payload.book_id) is None:
+        raise HTTPException(status_code=404, detail="book not found")
+    if session.scalar(select(Chapter.id).where(
+        Chapter.book_id == payload.book_id, Chapter.chapter_number == payload.chapter_number,
+    ).limit(1)):
+        raise HTTPException(status_code=409, detail=f"第 {payload.chapter_number} 章已存在，请换一个章节号")
+    # Same view the writer gets: arcs covering this chapter, character states from earlier chapters.
+    memory_repo = MemoryRepository(session)
+    story_arcs = arcs_covering(memory_repo.list_story_arcs(payload.book_id), payload.chapter_number)
     goal = plan_next_chapter(
         chapter_number=payload.chapter_number,
         chapter_goal=payload.chapter_goal,
         must_include=payload.must_include,
         must_avoid=payload.must_avoid,
         target_words=payload.target_words,
-        story_arcs=context["story_arcs"],
-        character_states=context["character_states"],
+        story_arcs=[{"arc_type": arc.arc_type, "stage_goal": arc.stage_goal} for arc in story_arcs],
+        character_states=memory_repo.list_latest_character_states(
+            payload.book_id, before_chapter_number=payload.chapter_number,
+        ),
     )
     chapter = chapter_repo.create_planned_chapter(
         book_id=payload.book_id,
