@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.agents.story_arcs import sync_story_arcs
 from app.api.dependencies import get_session
 from app.db.repositories import BookRepository, TrendSnapshotRepository
 
@@ -56,6 +57,7 @@ def create_book(
         book_outline=payload.book_outline,
     )
     book = repo.create_book(**values)
+    sync_story_arcs(session, book)
     session.commit()
     return {
         "id": book.id,
@@ -104,6 +106,7 @@ def update_book_outline(
     )
     if book is None:
         raise HTTPException(status_code=404, detail="book not found")
+    sync_story_arcs(session, book)
     session.commit()
     return {
         "id": book.id,

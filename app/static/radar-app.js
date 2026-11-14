@@ -1,7 +1,7 @@
 (function () {
   const ReactLib = window.React;
   const ReactDOMLib = window.ReactDOM;
-  const { requestJson, Navigation, statusLabel, FormField, StatusBadge, Feedback } = window.WriteAgentUI;
+  const { requestJson, Navigation, statusLabel, FormField, StatusBadge, Feedback, actLabel } = window.WriteAgentUI;
 
   if (!ReactLib || !ReactDOMLib) {
     throw new Error("页面运行资源加载失败，请刷新重试");
@@ -430,7 +430,7 @@
                       "ul",
                       { className: "radar-bullets" },
                       ((result.outline || {}).acts || []).map(function (act, index) {
-                        return ReactLib.createElement("li", { key: index }, act);
+                        return ReactLib.createElement("li", { key: index }, actLabel(act));
                       })
                     )
                   ),

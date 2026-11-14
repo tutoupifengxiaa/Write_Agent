@@ -2,6 +2,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.agents.story_arcs import arcs_covering
 from app.db.models import Book, Chapter
 from app.db.repositories import MemoryRepository
 from app.services.embedding import EmbeddingClient
@@ -74,7 +75,7 @@ def build_chapter_context_from_memory(
                     "stage_goal": arc.stage_goal,
                     "outline": arc.outline or {},
                 }
-                for arc in story_arcs
+                for arc in arcs_covering(story_arcs, chapter.chapter_number)
             ]
         },
         character_states=character_states,

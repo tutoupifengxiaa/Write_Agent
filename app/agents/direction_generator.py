@@ -24,7 +24,14 @@ def render_direction_generation_prompt(payload: dict[str, Any]) -> str:
                 "selling_points": ["string"],
                 "risk_flags": ["string"],
                 "outline": {
-                    "acts": ["string"],
+                    "acts": [
+                        {
+                            "name": "string",
+                            "goal": "what this act must achieve",
+                            "chapter_start": "integer, first chapter of the act",
+                            "chapter_end": "integer, last chapter of the act",
+                        }
+                    ],
                 },
                 "opening_scene": {
                     "location": "string",

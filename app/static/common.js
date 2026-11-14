@@ -61,6 +61,17 @@
     return labels[value] || value || "暂无状态";
   }
 
+  // Outline acts are plain strings in older outlines and objects with a chapter range in newer ones.
+  function actLabel(act) {
+    if (!act || typeof act !== "object") return String(act || "");
+    const name = act.name || act.goal || "";
+    let range = "";
+    if (act.chapter_start && act.chapter_end) range = "（第 " + act.chapter_start + "–" + act.chapter_end + " 章）";
+    else if (act.chapter_start) range = "（第 " + act.chapter_start + " 章起）";
+    const goal = act.goal && act.goal !== name ? "：" + act.goal : "";
+    return name + range + goal;
+  }
+
   function FormField({ id, label, as = "input", wrapped = false, labelClassName, onValueChange, children, ...controlProps }) {
     const control = ReactLib.createElement(as, {
       ...controlProps, id, onChange: event => onValueChange(event.target.value),
@@ -78,5 +89,5 @@
     return message ? ReactLib.createElement("div", props, message, children) : null;
   }
 
-  window.WriteAgentUI = { fetchJson, requestJson, NavLink, Navigation, statusLabel, FormField, StatusBadge, Feedback };
+  window.WriteAgentUI = { fetchJson, requestJson, NavLink, Navigation, statusLabel, actLabel, FormField, StatusBadge, Feedback };
 })();

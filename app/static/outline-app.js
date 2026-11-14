@@ -1,7 +1,7 @@
 (function () {
   const ReactLib = window.React;
   const ReactDOMLib = window.ReactDOM;
-  const { fetchJson, requestJson, Navigation, FormField, Feedback } = window.WriteAgentUI;
+  const { fetchJson, requestJson, Navigation, FormField, Feedback, actLabel } = window.WriteAgentUI;
 
   if (!ReactLib || !ReactDOMLib) {
     throw new Error("页面运行资源加载失败，请刷新重试");
@@ -414,7 +414,7 @@
                     "ul",
                     { className: "outline-bullets" },
                     (((result.book_outline || {}).acts) || []).map(function (act, index) {
-                      return ReactLib.createElement("li", { key: index }, act);
+                      return ReactLib.createElement("li", { key: index }, actLabel(act));
                     })
                   )
                 ),
