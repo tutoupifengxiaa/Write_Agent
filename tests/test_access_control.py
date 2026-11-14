@@ -113,3 +113,28 @@ def test_stream_requires_authentication_before_calling_writer(protected_client):
     stream = protected_client.post(path, json=payload, headers={"Authorization": f"Bearer {TOKEN}"})
     assert stream.status_code == 200 and "event: done" in stream.text
     assert calls == ["Test"]
+
+
+def test_auth_status_reports_whether_access_control_is_on():
+    with make_client("") as client:
+        assert client.get("/auth/status").json() == {"enabled": False}
+        assert client.post("/logout").status_code == 404
+    with make_client(TOKEN) as client:
+        # Reachable before login so pages can decide whether to show the logout button.
+        assert client.get("/auth/status").json() == {"enabled": True}
+
+
+def test_logout_clears_cookie_and_requires_login_again(protected_client):
+    protected_client.post("/login", data={"token": TOKEN})
+    assert protected_client.get("/books").status_code == 200
+
+    # A GET cannot log the user out; only the POST form does.
+    assert protected_client.get("/logout").status_code == 405
+    assert protected_client.get("/books").status_code == 200
+
+    response = protected_client.post("/logout")
+    assert response.status_code == 303 and response.headers["location"] == "/login"
+    cleared = SimpleCookie(response.headers["set-cookie"])[COOKIE]
+    assert cleared.value == "" and cleared["max-age"] == "0" and cleared["path"] == "/"
+    assert COOKIE not in protected_client.cookies
+    assert protected_client.get("/books").status_code == 401

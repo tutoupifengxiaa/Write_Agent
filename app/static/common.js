@@ -34,6 +34,28 @@
     }, props.label);
   }
 
+  let authStatus = null;
+  function loadAuthStatus() {
+    // One request per page load; failures just hide the logout button.
+    authStatus = authStatus || fetch("/auth/status")
+      .then(function (response) { return response.ok ? response.json() : { enabled: false }; })
+      .catch(function () { return { enabled: false }; });
+    return authStatus;
+  }
+
+  // Rendered only when access control is on; kept separate so Navigation itself stays hook-free.
+  function LogoutButton() {
+    const [canLogout, setCanLogout] = ReactLib.useState(false);
+    ReactLib.useEffect(function () {
+      let active = true;
+      loadAuthStatus().then(function (status) { if (active) setCanLogout(!!status.enabled); });
+      return function () { active = false; };
+    }, []);
+    if (!canLogout) return null;
+    return ReactLib.createElement("form", { method: "post", action: "/logout", className: "app-nav-logout" },
+      ReactLib.createElement("button", { type: "submit", className: "app-link" }, "退出登录"));
+  }
+
   function Navigation(props) {
     const links = [
       ["/hub", "统一入口"], ["/radar", "选题雷达"], ["/outline", "大纲生成"],
@@ -43,7 +65,8 @@
     return ReactLib.createElement("nav", { className: "app-nav", "aria-label": "工作区导航" },
       links.map(function (link) {
         return ReactLib.createElement(NavLink, { key: link[0], href: link[0], label: link[1], primary: props.current === link[0] });
-      })
+      }),
+      ReactLib.createElement(LogoutButton, { key: "logout" })
     );
   }
 

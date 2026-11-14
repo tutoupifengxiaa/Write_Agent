@@ -163,7 +163,11 @@ function request(url, options, kind) {
   return new Promise((resolve, reject) => requests.push({url, options, kind, resolve, reject}));
 }
 const sandbox = { window: { React: react, ReactDOM: { createRoot: () => ({render: value => tree = value}) } },
-  document: { getElementById: () => ({}) }, fetch: request, console };
+  document: { getElementById: () => ({}) }, console,
+  // The shared nav asks once whether to show logout; answer it here so page request counts stay unchanged.
+  fetch: (url, ...rest) => url === '/auth/status'
+    ? Promise.resolve({ ok: true, json: () => Promise.resolve({ enabled: false }) })
+    : request(url, ...rest) };
 const commonPath = require('path').join(require('path').dirname(path), 'common.js');
 vm.runInNewContext(fs.readFileSync(commonPath, 'utf8'), sandbox);
 Object.assign(sandbox.window.WriteAgentUI, { fetchJson: request, requestJson: (url, options) => request(url, options, 'shared') });

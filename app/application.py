@@ -315,11 +315,17 @@ def create_fastapi_app(
     def home() -> RedirectResponse:
         return RedirectResponse("/ops")
 
+    @app.get("/auth/status", include_in_schema=False)
+    def auth_status() -> dict[str, bool]:
+        # Lets pages decide whether to offer a logout button.
+        return {"enabled": bool(getattr(app.state, "access_control_enabled", False))}
+
     return app
 
 
 def _configure_access_control(app: FastAPI, expected_digest: str) -> None:
     cookie_name = "write_agent_token"
+    app.state.access_control_enabled = True
 
     def matches_token(value: str) -> bool:
         return compare_digest(sha256(value.encode()).hexdigest(), expected_digest)
@@ -327,9 +333,9 @@ def _configure_access_control(app: FastAPI, expected_digest: str) -> None:
     @app.middleware("http")
     async def check_access(request: Request, call_next):
         path = request.url.path
-        if path == "/health" or path.startswith("/static/") or (
+        if path in {"/health", "/auth/status"} or path.startswith("/static/") or (
             path == "/login" and request.method in {"GET", "POST"}
-        ):
+        ) or (path == "/logout" and request.method == "POST"):
             return await call_next(request)
         scheme, _, credential = request.headers.get("authorization", "").partition(" ")
         if scheme.lower() == "bearer" and matches_token(credential):
@@ -374,4 +380,11 @@ def _configure_access_control(app: FastAPI, expected_digest: str) -> None:
             cookie_name, expected_digest, httponly=True, samesite="strict", path="/",
             secure=request.url.scheme == "https",
         )
+        return response
+
+    @app.post("/logout", include_in_schema=False)
+    async def logout(request: Request):
+        response = RedirectResponse("/login", status_code=303)
+        response.delete_cookie(cookie_name, path="/", httponly=True, samesite="strict",
+                               secure=request.url.scheme == "https")
         return response
