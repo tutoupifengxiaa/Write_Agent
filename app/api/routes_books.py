@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.story_arcs import sync_story_arcs
 from app.api.dependencies import get_session
+from app.db.deletion import delete_book, has_active_work
 from app.db.models import Chapter, ChapterVersion
 from app.db.repositories import BookRepository, TrendSnapshotRepository
 
@@ -32,6 +33,16 @@ class BookOutlineUpdateRequest(BaseModel):
     book_outline: dict | None = None
     logline: str | None = None
     style_rules: dict | None = None
+
+
+def _text(max_length: int):
+    return Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=max_length)]
+
+
+class BookUpdateRequest(BaseModel):
+    title: _text(255) | None = None
+    platform: _text(64) | None = None
+    genre: _text(128) | None = None
 
 
 @router.get("/books")
@@ -89,6 +100,34 @@ def get_book(book_id: str, session: Session = Depends(get_session)) -> dict:
         "style_rules": book.style_rules,
         "status": book.status,
     }
+
+
+@router.patch("/books/{book_id}")
+def update_book(
+    book_id: str,
+    payload: BookUpdateRequest,
+    session: Session = Depends(get_session),
+) -> dict:
+    book = BookRepository(session).get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="book not found")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(book, field, value)
+    session.commit()
+    return {"id": book.id, "title": book.title, "platform": book.platform, "genre": book.genre,
+            "status": book.status}
+
+
+@router.delete("/books/{book_id}")
+def remove_book(book_id: str, session: Session = Depends(get_session)) -> dict:
+    if BookRepository(session).get_book(book_id) is None:
+        raise HTTPException(status_code=404, detail="book not found")
+    chapter_ids = list(session.scalars(select(Chapter.id).where(Chapter.book_id == book_id)))
+    if has_active_work(session, chapter_ids):
+        raise HTTPException(status_code=409, detail="有章节正在后台生成或发布，请稍后再删除")
+    deleted_chapters = delete_book(session, book_id)
+    session.commit()
+    return {"book_id": book_id, "deleted_chapters": deleted_chapters}
 
 
 @router.get("/books/{book_id}/export")

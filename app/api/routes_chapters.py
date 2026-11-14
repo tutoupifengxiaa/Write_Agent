@@ -5,11 +5,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.agents.planner import plan_next_chapter
 from app.api.dependencies import get_session
+from app.db.deletion import delete_chapters, has_active_work
 from app.db.models import Chapter, ChapterVersion, PublishJob
 from app.db.repositories import BookRepository, ChapterRepository, PublishJobRepository
 from app.ui.chapter_detail_page import render_chapter_detail_page
@@ -369,6 +370,45 @@ def retry_publish(
         raise HTTPException(status_code=409, detail="只有失败且未执行中的发布任务可以重试")
     session.commit()
     return {"chapter_id": chapter_id, "job_id": job.id, "status": job.status}
+
+
+class ChapterUpdateRequest(BaseModel):
+    title: ChapterTitle | None = None
+    chapter_number: int | None = Field(default=None, gt=0)
+
+
+@router.patch("/chapters/{chapter_id}")
+def update_chapter(
+    chapter_id: str,
+    payload: ChapterUpdateRequest,
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    chapter = ChapterRepository(session).get_chapter(chapter_id)
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="chapter not found")
+    if has_active_work(session, [chapter_id]):
+        raise HTTPException(status_code=409, detail="章节正在后台生成或发布，请稍后再修改")
+    number = payload.chapter_number
+    if number is not None and number != chapter.chapter_number and session.scalar(
+        select(Chapter.id).where(Chapter.book_id == chapter.book_id, Chapter.chapter_number == number).limit(1)
+    ):
+        raise HTTPException(status_code=409, detail=f"第 {number} 章已存在，请先调整那一章的章节号")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(chapter, field, value)
+    session.commit()
+    return {"id": chapter.id, "book_id": chapter.book_id, "chapter_number": chapter.chapter_number,
+            "title": chapter.title, "status": chapter.status}
+
+
+@router.delete("/chapters/{chapter_id}")
+def remove_chapter(chapter_id: str, session: Session = Depends(get_session)) -> dict[str, str]:
+    if ChapterRepository(session).get_chapter(chapter_id) is None:
+        raise HTTPException(status_code=404, detail="chapter not found")
+    if has_active_work(session, [chapter_id]):
+        raise HTTPException(status_code=409, detail="章节正在后台生成或发布，请稍后再删除")
+    delete_chapters(session, [chapter_id])
+    session.commit()
+    return {"chapter_id": chapter_id, "status": "deleted"}
 
 
 @router.post("/chapters/{chapter_id}/requeue-generation", status_code=202)

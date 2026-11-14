@@ -41,6 +41,8 @@
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [bookEdit, setBookEdit] = useState(null);
+    const [chapterEdit, setChapterEdit] = useState(null);
     const [chapterForm, setChapterForm] = useState({
       chapterNumber: "",
       title: "",
@@ -60,6 +62,10 @@
           setError(fetchError.message || "书籍列表加载失败");
         });
     }, []);
+
+    // Close edit forms when the selection changes, so a save never targets a different item.
+    useEffect(function () { setBookEdit(null); }, [selectedBook && selectedBook.id]);
+    useEffect(function () { setChapterEdit(null); }, [selectedChapterId]);
 
     function resetFeedback() {
       setError("");
@@ -177,6 +183,95 @@
         .finally(function () {
           setIsSubmitting(false);
         });
+    }
+
+    function runAction(request, successText, failText, after) {
+      resetFeedback();
+      setIsSubmitting(true);
+      return request()
+        .then(function () {
+          setSuccess(successText);
+          return after ? after() : null;
+        })
+        .catch(function (requestError) {
+          setError(requestError.message || failText);
+        })
+        .finally(function () {
+          setIsSubmitting(false);
+        });
+    }
+
+    function sendJson(url, method, body) {
+      return requestJson(url, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    }
+
+    function reloadBooks(nextBookId) {
+      return fetchJson("/books").then(function (rows) {
+        setBooks(rows);
+        const target = rows.find(function (row) { return row.id === nextBookId; }) || rows[0];
+        if (target) return loadBook(target.id);
+        setSelectedBook(null);
+        setChapters([]);
+        setSelectedChapterId("");
+        return null;
+      });
+    }
+
+    function handleSaveBook() {
+      const bookId = selectedBook.id;
+      runAction(function () {
+        return sendJson("/books/" + encodeURIComponent(bookId), "PATCH", bookEdit);
+      }, "书籍信息已更新", "书籍信息保存失败", function () {
+        setBookEdit(null);
+        return reloadBooks(bookId);
+      });
+    }
+
+    function handleDeleteBook() {
+      const book = selectedBook;
+      const confirmed = window.confirm(
+        "将永久删除《" + book.title + "》及其全部 " + chapters.length +
+        " 个章节、所有版本、角色记录和发布任务。此操作无法恢复，确定删除？"
+      );
+      if (!confirmed) return;
+      runAction(function () {
+        return sendJson("/books/" + encodeURIComponent(book.id), "DELETE");
+      }, "已删除《" + book.title + "》", "删除书籍失败", function () {
+        setBookEdit(null);
+        return reloadBooks(null);
+      });
+    }
+
+    function handleSaveChapter() {
+      const chapterId = selectedChapter.id;
+      runAction(function () {
+        return sendJson("/chapters/" + encodeURIComponent(chapterId), "PATCH", {
+          title: chapterEdit.title,
+          chapter_number: Number(chapterEdit.chapterNumber || 0),
+        });
+      }, "章节信息已更新", "章节信息保存失败", function () {
+        setChapterEdit(null);
+        return loadBook(selectedBook.id).then(function () { setSelectedChapterId(chapterId); });
+      });
+    }
+
+    function handleDeleteChapter() {
+      const chapter = selectedChapter;
+      const confirmed = window.confirm(
+        "将永久删除第 " + chapter.chapter_number + " 章《" + chapter.title +
+        "》及其所有版本、发布任务和角色记录。此操作无法恢复，确定删除？"
+      );
+      if (!confirmed) return;
+      runAction(function () {
+        return sendJson("/chapters/" + encodeURIComponent(chapter.id), "DELETE");
+      }, "已删除第 " + chapter.chapter_number + " 章", "删除章节失败", function () {
+        setChapterEdit(null);
+        return loadBook(selectedBook.id);
+      });
     }
 
     function handleExport(format) {
@@ -355,7 +450,47 @@
                       onClick: function () { handleExport("md"); } },
                     "导出 Markdown"
                   ),
-                  ReactLib.createElement("span", { className: "library-label" }, "仅导出已通过审核的章节")
+                  ReactLib.createElement(
+                    "button",
+                    { type: "button", className: "library-secondary-button", disabled: isSubmitting,
+                      onClick: function () {
+                        setBookEdit(bookEdit ? null : {
+                          title: selectedBook.title, platform: selectedBook.platform, genre: selectedBook.genre,
+                        });
+                      } },
+                    bookEdit ? "取消编辑" : "编辑信息"
+                  ),
+                  ReactLib.createElement(
+                    "button",
+                    { type: "button", className: "library-secondary-button", disabled: isSubmitting,
+                      onClick: handleDeleteBook },
+                    "删除书籍"
+                  ),
+                  ReactLib.createElement("span", { className: "library-label" }, "导出仅包含已通过审核的章节")
+                )
+              : null,
+            selectedBook && bookEdit
+              ? ReactLib.createElement(
+                  "div",
+                  { className: "library-form-grid" },
+                  ["title", "platform", "genre"].map(function (field) {
+                    return ReactLib.createElement(FormField, {
+                      key: field, wrapped: true, label: { title: "书名", platform: "平台", genre: "题材" }[field],
+                      value: bookEdit[field] || "",
+                      onValueChange: function (value) {
+                        setBookEdit(function (current) { return Object.assign({}, current, { [field]: value }); });
+                      },
+                    });
+                  }),
+                  ReactLib.createElement(
+                    "div",
+                    { className: "library-button-row" },
+                    ReactLib.createElement(
+                      "button",
+                      { type: "button", onClick: handleSaveBook, disabled: isSubmitting },
+                      "保存书籍信息"
+                    )
+                  )
                 )
               : null
           ),
@@ -461,6 +596,22 @@
                   ReactLib.createElement(
                     "div",
                     { className: "library-button-row" },
+                    ReactLib.createElement(
+                      "button",
+                      { type: "button", className: "library-secondary-button", disabled: isSubmitting,
+                        onClick: function () {
+                          setChapterEdit(chapterEdit ? null : {
+                            title: selectedChapter.title, chapterNumber: String(selectedChapter.chapter_number),
+                          });
+                        } },
+                      chapterEdit ? "取消编辑" : "编辑章节"
+                    ),
+                    ReactLib.createElement(
+                      "button",
+                      { type: "button", className: "library-secondary-button", disabled: isSubmitting,
+                        onClick: handleDeleteChapter },
+                      "删除章节"
+                    ),
                     selectedChapter.status === "generation_failed"
                       ? ReactLib.createElement(
                           "button",
@@ -492,6 +643,33 @@
                       "查看章节详情"
                     )
                   ),
+                  chapterEdit
+                    ? ReactLib.createElement(
+                        "div",
+                        { className: "library-form-grid" },
+                        ReactLib.createElement(FormField, {
+                          label: "章节号", wrapped: true, type: "number", min: 1, value: chapterEdit.chapterNumber,
+                          onValueChange: function (value) {
+                            setChapterEdit(function (current) { return Object.assign({}, current, { chapterNumber: value }); });
+                          },
+                        }),
+                        ReactLib.createElement(FormField, {
+                          label: "标题", wrapped: true, value: chapterEdit.title,
+                          onValueChange: function (value) {
+                            setChapterEdit(function (current) { return Object.assign({}, current, { title: value }); });
+                          },
+                        }),
+                        ReactLib.createElement(
+                          "div",
+                          { className: "library-button-row" },
+                          ReactLib.createElement(
+                            "button",
+                            { type: "button", onClick: handleSaveChapter, disabled: isSubmitting },
+                            "保存章节信息"
+                          )
+                        )
+                      )
+                    : null,
                   selectedChapterJob
                     ? ReactLib.createElement(
                         "div",
