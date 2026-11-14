@@ -179,6 +179,39 @@
         });
     }
 
+    function handleExport(format) {
+      resetFeedback();
+      setIsSubmitting(true);
+      fetch("/books/" + encodeURIComponent(selectedBook.id) + "/export?format=" + format)
+        .then(function (response) {
+          if (!response.ok) {
+            return response.json().catch(function () { return {}; }).then(function (payload) {
+              throw new Error(typeof payload.detail === "string" ? payload.detail : "导出失败（" + response.status + "）");
+            });
+          }
+          const disposition = response.headers.get("Content-Disposition") || "";
+          const match = /filename\*=UTF-8''([^;]+)/.exec(disposition);
+          const filename = match ? decodeURIComponent(match[1]) : selectedBook.title + "." + format;
+          return response.blob().then(function (blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            setSuccess("已导出 " + filename);
+          });
+        })
+        .catch(function (requestError) {
+          setError(requestError.message || "导出失败");
+        })
+        .finally(function () {
+          setIsSubmitting(false);
+        });
+    }
+
     function handleRequeueGeneration(chapterId) {
       resetFeedback();
       setIsSubmitting(true);
@@ -305,7 +338,26 @@
                     ReactLib.createElement("strong", null, renderStyleRules(selectedBook.style_rules))
                   )
                 )
-              : ReactLib.createElement("div", { className: "library-empty" }, "请选择一本书查看详情。")
+              : ReactLib.createElement("div", { className: "library-empty" }, "请选择一本书查看详情。"),
+            selectedBook
+              ? ReactLib.createElement(
+                  "div",
+                  { className: "library-button-row" },
+                  ReactLib.createElement(
+                    "button",
+                    { type: "button", className: "library-secondary-button", disabled: isSubmitting,
+                      onClick: function () { handleExport("txt"); } },
+                    "导出 TXT"
+                  ),
+                  ReactLib.createElement(
+                    "button",
+                    { type: "button", className: "library-secondary-button", disabled: isSubmitting,
+                      onClick: function () { handleExport("md"); } },
+                    "导出 Markdown"
+                  ),
+                  ReactLib.createElement("span", { className: "library-label" }, "仅导出已通过审核的章节")
+                )
+              : null
           ),
           ReactLib.createElement(
             "section",

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.story_arcs import sync_story_arcs
 from app.api.dependencies import get_session
+from app.db.models import Chapter, ChapterVersion
 from app.db.repositories import BookRepository, TrendSnapshotRepository
 
 router = APIRouter()
@@ -84,6 +89,41 @@ def get_book(book_id: str, session: Session = Depends(get_session)) -> dict:
         "style_rules": book.style_rules,
         "status": book.status,
     }
+
+
+@router.get("/books/{book_id}/export")
+def export_book(
+    book_id: str,
+    format: Literal["txt", "md"] = "txt",
+    session: Session = Depends(get_session),
+) -> Response:
+    book = BookRepository(session).get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="book not found")
+    # Only the approved version of each chapter is exported, so unreviewed drafts never leak in.
+    rows = session.execute(
+        select(Chapter.chapter_number, Chapter.title, ChapterVersion.content)
+        .join(ChapterVersion, ChapterVersion.id == Chapter.approved_version_id)
+        .where(Chapter.book_id == book_id, ChapterVersion.source == "approved")
+        .order_by(Chapter.chapter_number)
+    ).all()
+    if not rows:
+        raise HTTPException(status_code=404, detail="暂无已通过审核的章节可导出")
+
+    if format == "md":
+        parts = [f"# {book.title}"]
+        if book.logline:
+            parts.append(f"> {book.logline}")
+        parts += [f"## 第{number}章 {title}\n\n{(content or '').strip()}" for number, title, content in rows]
+        media_type = "text/markdown; charset=utf-8"
+    else:
+        parts = [book.title]
+        parts += [f"第{number}章 {title}\n\n{(content or '').strip()}" for number, title, content in rows]
+        media_type = "text/plain; charset=utf-8"
+    filename = f"{book.title}.{format}"
+    disposition = f"attachment; filename=\"book_export.{format}\"; filename*=UTF-8''{quote(filename)}"
+    return Response("\n\n\n".join(parts) + "\n", media_type=media_type,
+                    headers={"Content-Disposition": disposition})
 
 
 @router.put("/books/{book_id}/outline")
