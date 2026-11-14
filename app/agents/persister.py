@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
-from app.db.models import Chapter, ChapterVersion, ContinuityEvent
+from app.agents.state_deltas import character_changes
+from app.db.models import Chapter, ChapterVersion, Character, CharacterSnapshot, ContinuityEvent
 from app.db.repositories import PublishJobRepository
+
+CHARACTER_HISTORY_LIMIT = 10
 
 
 def persist_approved_chapter(
@@ -45,6 +48,7 @@ def persist_approved_chapter(
                 delta=delta,
             )
         )
+    _record_character_states(session, chapter, state_deltas)
 
     publish_job_id = None
     if create_publish_job:
@@ -66,6 +70,42 @@ def persist_approved_chapter(
         "db_saved": True,
         "publish_job_id": publish_job_id,
     }
+
+
+def _record_character_states(session, chapter: Chapter, state_deltas: list[dict]) -> None:
+    """Keep one cumulative snapshot per character that changed in this approved chapter."""
+    # Re-approving a chapter replaces its earlier snapshots instead of stacking duplicates.
+    session.execute(delete(CharacterSnapshot).where(CharacterSnapshot.chapter_id == chapter.id))
+    for name, changes in character_changes(state_deltas).items():
+        character = session.scalar(
+            select(Character).where(Character.book_id == chapter.book_id, Character.name == name)
+        )
+        if character is None:
+            character = Character(book_id=chapter.book_id, name=name)
+            session.add(character)
+            session.flush()
+        previous = session.scalar(
+            select(CharacterSnapshot.state)
+            .join(Chapter, Chapter.id == CharacterSnapshot.chapter_id)
+            .where(
+                CharacterSnapshot.character_id == character.id,
+                Chapter.chapter_number < chapter.chapter_number,
+            )
+            .order_by(Chapter.chapter_number.desc(), CharacterSnapshot.created_at.desc())
+            .limit(1)
+        )
+        earlier = previous.get("changes", []) if isinstance(previous, dict) else []
+        history = [item for item in earlier if isinstance(item, dict)]
+        history += [{"chapter": chapter.chapter_number, "change": change} for change in changes]
+        session.add(
+            CharacterSnapshot(
+                character_id=character.id,
+                chapter_id=chapter.id,
+                state={"latest_change": changes[-1], "changes": history[-CHARACTER_HISTORY_LIMIT:]},
+            )
+        )
+        if (character.last_updated_chapter_number or 0) < chapter.chapter_number:
+            character.last_updated_chapter_number = chapter.chapter_number
 
 
 def persist_review_candidate(

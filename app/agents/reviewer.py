@@ -4,6 +4,7 @@ import json
 import math
 
 from app.agents.review_issues import has_blocking_issues, normalize_review_issues
+from app.agents.state_deltas import STATE_DELTA_RULE, STATE_DELTA_SCHEMA
 from app.prompts.loader import load_prompt_template
 from app.services.llm_client import LLMClient
 
@@ -15,6 +16,7 @@ def render_reviewer_prompt(content: str, canonical_facts: dict) -> str:
             "Return a JSON object only.",
             "Check whether the chapter aligns with chapter_goal, story arcs, character state, and recent summaries.",
             "Flag concrete issues instead of giving vague advice.",
+            STATE_DELTA_RULE,
         ],
         "output_schema": {
             "approved": "boolean",
@@ -29,13 +31,7 @@ def render_reviewer_prompt(content: str, canonical_facts: dict) -> str:
                 }
             ],
             "revision_priorities": ["ordered revision focus"],
-            "state_deltas": [
-                {
-                    "type": "state change type",
-                    "target": "affected entity",
-                    "change": "structured update description",
-                }
-            ],
+            "state_deltas": [STATE_DELTA_SCHEMA],
         },
         "chapter_content": content,
         "canonical_facts": canonical_facts,

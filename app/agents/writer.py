@@ -4,6 +4,7 @@ import json
 import re
 from typing import Iterable
 
+from app.agents.state_deltas import STATE_DELTA_RULE, STATE_DELTA_SCHEMA
 from app.prompts.loader import load_prompt_template
 from app.services.llm_client import LLMClient
 
@@ -16,15 +17,10 @@ def render_writer_prompt(context: dict) -> str:
             "title": "chapter title string",
             "content": "chapter body string",
             "summary": "short chapter summary",
-            "state_deltas": [
-                {
-                    "type": "state change type",
-                    "target": "affected entity",
-                    "change": "structured update description",
-                }
-            ],
+            "state_deltas": [STATE_DELTA_SCHEMA],
         },
         "requirements": {
+            "state_deltas": STATE_DELTA_RULE,
             "language": "Simplified Chinese",
             "return_json_only": True,
             "no_markdown": True,
