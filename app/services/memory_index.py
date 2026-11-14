@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 
 from sqlalchemy import func, select
 
@@ -17,7 +17,6 @@ from app.db.models import (
 )
 from app.db.repositories import MemoryEmbeddingRepository
 from app.services.embedding import cosine_similarity
-
 
 SOURCE_WEIGHTS = {
     "chapter_summary": 1.0,

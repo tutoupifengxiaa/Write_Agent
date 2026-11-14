@@ -45,7 +45,7 @@ def _positive_float(value: str) -> float:
     return parsed
 
 
-def open_creation_page(host: str = "127.0.0.1", port: int = 8000) -> None:
+def open_creation_page(host: str = "127.0.0.1", port: int = 8888) -> None:
     time.sleep(0.8)
     webbrowser.open(f"http://{host}:{port}/ops")
 
@@ -54,16 +54,17 @@ def _log_worker_event(event: str, **payload) -> None:
     logger.info(event, extra={key: payload[key] for key in WORKER_LOG_FIELDS if key in payload})
 
 
-def run_web(*, host: str = "127.0.0.1", port: int = 8000) -> int:
+def run_web(*, host: str = "127.0.0.1", port: int = 8000, open_browser: bool = True) -> int:
     has_token = bool(secret_value(settings.access_token).strip())
     if host.lower() not in {"127.0.0.1", "localhost", "::1"} and not has_token:
         print("ACCESS_TOKEN is required when listening on a non-local address", file=sys.stderr)
         return 1
-    threading.Thread(
-        target=open_creation_page,
-        kwargs={"host": host, "port": port},
-        daemon=True,
-    ).start()
+    if open_browser:
+        threading.Thread(
+            target=open_creation_page,
+            kwargs={"host": host, "port": port},
+            daemon=True,
+        ).start()
     uvicorn.run("app.main:app", host=host, port=port, reload=False)
     return 0
 
@@ -135,6 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
     web_parser = subparsers.add_parser("web")
     web_parser.add_argument("--host", default="127.0.0.1")
     web_parser.add_argument("--port", type=_positive_int, default=8888)
+    web_parser.add_argument("--no-browser", action="store_true", help="start the server without opening a browser")
 
     worker_parser = subparsers.add_parser("worker")
     worker_parser.add_argument("--batch-limit", type=_positive_int)
@@ -164,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         initialize_database()
         return 0
     if mode == "web":
-        return run_web(host=parsed.host, port=parsed.port)
+        return run_web(host=parsed.host, port=parsed.port, open_browser=not parsed.no_browser)
     if mode == "worker":
         return run_worker(
             batch_limit=parsed.batch_limit,

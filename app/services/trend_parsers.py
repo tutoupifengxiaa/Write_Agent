@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from html.parser import HTMLParser
 import json
 import re
+from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from typing import Any, Iterator
 from urllib.parse import urljoin, urlsplit, urlunsplit
-
 
 PROVIDER_RULES = {
     "fanqie": {

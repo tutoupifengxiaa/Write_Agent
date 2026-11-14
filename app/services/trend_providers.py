@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
-import re
 
 import httpx
 
@@ -13,7 +13,6 @@ from app.services.trend_parsers import (
     parse_fanqie_book_details,
     parse_provider_ranking,
 )
-
 
 HotlistItem = dict[str, Any]
 

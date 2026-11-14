@@ -3,7 +3,6 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-
 PROMPTS_DIR = Path(__file__).resolve().parent
 
 

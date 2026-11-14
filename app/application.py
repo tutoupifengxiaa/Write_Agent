@@ -15,29 +15,30 @@ from pydantic import SecretStr
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
+from app.agents.direction_generator import generate_direction_package
+from app.agents.publisher import publish_draft
 from app.agents.reviewer import review_chapter
 from app.agents.reviser import revise_chapter
 from app.agents.writer import stream_write_chapter, write_chapter
-from app.agents.direction_generator import generate_direction_package
-from app.api.routes_hub import router as hub_router
-from app.api.routes_library import router as library_router
-from app.api.routes_outline import router as outline_router
-from app.agents.publisher import publish_draft
 from app.api.routes_books import router as books_router
 from app.api.routes_chapters import router as chapters_router
 from app.api.routes_creation import router as creation_router
+from app.api.routes_hub import router as hub_router
 from app.api.routes_jobs import router as jobs_router
+from app.api.routes_library import router as library_router
+from app.api.routes_outline import router as outline_router
 from app.api.routes_review_center import router as review_center_router
 from app.api.routes_trends import router as trends_router
-from app.config import secret_value, settings as default_settings
+from app.config import secret_value
+from app.config import settings as default_settings
 from app.db.base import SessionLocal, create_engine_from_settings, engine, make_session_factory, warn_if_memory_database
 from app.db.schema_migrations import upgrade_database
 from app.orchestrator.scheduler import Scheduler
-from app.services.fanqie_browser import create_fanqie_browser_client_from_settings
 from app.services.embedding import (
     KeywordEmbeddingClient,
     OpenAICompatibleEmbeddingClient,
 )
+from app.services.fanqie_browser import create_fanqie_browser_client_from_settings
 from app.services.llm_client import OpenAIResponsesLLMClient
 from app.ui.page_shell import static_url
 

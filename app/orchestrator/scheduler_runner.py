@@ -5,7 +5,6 @@ from typing import Callable
 
 from app.db.repositories import SchedulerRunRepository
 
-
 CycleEventCallback = Callable[[str, dict], None]
 DEFAULT_MAX_CONSECUTIVE_FAILURES = 5
 

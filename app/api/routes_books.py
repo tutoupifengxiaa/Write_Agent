@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_session
 from app.db.repositories import BookRepository, TrendSnapshotRepository
 
-
 router = APIRouter()
 
 
@@ -30,7 +29,7 @@ class BookOutlineUpdateRequest(BaseModel):
 
 
 @router.get("/books")
-def list_books(session: Session = Depends(get_session)) -> list[dict]:
+def list_books(session: Session = Depends(get_session)) -> list[dict]:  # noqa: B008
     repo = BookRepository(session)
     books = repo.list_books()
     return [
@@ -48,7 +47,7 @@ def list_books(session: Session = Depends(get_session)) -> list[dict]:
 @router.post("/books", status_code=201)
 def create_book(
     payload: BookCreateRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict:
     repo = BookRepository(session)
     values = payload.model_dump()
@@ -68,7 +67,7 @@ def create_book(
 
 
 @router.get("/books/{book_id}")
-def get_book(book_id: str, session: Session = Depends(get_session)) -> dict:
+def get_book(book_id: str, session: Session = Depends(get_session)) -> dict:  # noqa: B008
     repo = BookRepository(session)
     book = repo.get_book(book_id)
     if book is None:
@@ -89,7 +88,7 @@ def get_book(book_id: str, session: Session = Depends(get_session)) -> dict:
 def update_book_outline(
     book_id: str,
     payload: BookOutlineUpdateRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict:
     repo = BookRepository(session)
     if repo.get_book(book_id) is None:

@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse
 
 from app.ui.hub_page import render_hub_page
 
-
 router = APIRouter()
 
 

@@ -3,7 +3,6 @@ from uuid import uuid4
 
 from sqlalchemy import and_, or_, update
 
-
 LEASE_SECONDS = 1800
 
 

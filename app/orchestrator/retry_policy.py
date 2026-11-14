@@ -2,7 +2,6 @@ import httpx
 
 from app.services.llm_client import LLMConfigurationError
 
-
 TRANSIENT_ERROR = "transient_error"
 BUSINESS_ERROR = "business_error"
 PLATFORM_ERROR = "platform_error"

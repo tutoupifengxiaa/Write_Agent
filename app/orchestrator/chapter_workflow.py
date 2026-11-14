@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal, TypedDict
 from datetime import timedelta
+from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select, update
@@ -9,9 +9,7 @@ from sqlalchemy import select, update
 from app.agents.context_builder import build_chapter_context_from_memory
 from app.agents.persister import persist_approved_chapter, persist_review_candidate
 from app.db.models import Chapter
-from app.services.llm_client import LLMConfigurationError
 from app.orchestrator.retry_policy import classify_error, max_retries
-from app.orchestrator.task_claims import LEASE_SECONDS, claim_task, utc_now
 from app.orchestrator.state_machine import (
     APPROVED,
     CONTEXT_READY,
@@ -21,6 +19,8 @@ from app.orchestrator.state_machine import (
     WRITING,
     ChapterStateMachine,
 )
+from app.orchestrator.task_claims import LEASE_SECONDS, claim_task, utc_now
+from app.services.llm_client import LLMConfigurationError
 
 
 class ChapterWorkflowState(TypedDict, total=False):

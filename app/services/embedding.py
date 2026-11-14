@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import math
 import re
+from abc import ABC, abstractmethod
 
 import httpx
 from pydantic import SecretStr
 
 from app.config import secret_value
+
 
 class EmbeddingClient(ABC):
     @abstractmethod

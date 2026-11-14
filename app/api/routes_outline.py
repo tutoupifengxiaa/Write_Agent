@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from app.ui.outline_page import render_outline_page
 
-
 router = APIRouter()
 
 

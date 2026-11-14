@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import Counter
 
-
 GENRE_BUCKET_RULES = {
     "都市": "都市现实",
     "现言": "情感关系",

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from typing import Annotated
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import select, update
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.agents.planner import plan_next_chapter
@@ -12,7 +13,6 @@ from app.api.dependencies import get_session
 from app.db.models import ChapterVersion, PublishJob
 from app.db.repositories import BookRepository, ChapterRepository, PublishJobRepository
 from app.ui.chapter_detail_page import render_chapter_detail_page
-
 
 router = APIRouter()
 ChapterTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
@@ -43,7 +43,7 @@ class ChapterPlanRequest(BaseModel):
 @router.post("/chapters", status_code=201)
 def create_chapter(
     payload: ChapterCreateRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, object]:
     repo = ChapterRepository(session)
     chapter = repo.create_planned_chapter(**payload.model_dump())
@@ -61,7 +61,7 @@ def create_chapter(
 @router.post("/chapters/plan", status_code=201)
 def plan_chapter(
     payload: ChapterPlanRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, object]:
     book_repo = BookRepository(session)
     chapter_repo = ChapterRepository(session)
@@ -96,7 +96,7 @@ def plan_chapter(
 @router.post("/books/{book_id}/chapters/from-outline", status_code=201)
 def create_chapters_from_outline(
     book_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, object]:
     book_repo = BookRepository(session)
     chapter_repo = ChapterRepository(session)
@@ -181,7 +181,7 @@ def create_chapters_from_outline(
 @router.get("/books/{book_id}/chapters")
 def list_book_chapters(
     book_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> list[dict[str, object]]:
     repo = ChapterRepository(session)
     chapters = repo.list_book_chapters(book_id)
@@ -200,7 +200,7 @@ def list_book_chapters(
 
 @router.get("/chapters/manual-review-queue")
 def list_manual_review_queue(
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> list[dict[str, object]]:
     repo = ChapterRepository(session)
     return repo.list_manual_review_queue()
@@ -209,7 +209,7 @@ def list_manual_review_queue(
 @router.get("/chapters/{chapter_id}/detail", response_class=HTMLResponse)
 def chapter_detail_page(
     chapter_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> HTMLResponse:
     chapter_repo = ChapterRepository(session)
     book_repo = BookRepository(session)
@@ -279,7 +279,7 @@ def chapter_detail_page(
 @router.get("/chapters/{chapter_id}")
 def get_chapter(
     chapter_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, object]:
     repo = ChapterRepository(session)
     chapter = repo.get_chapter(chapter_id)
@@ -299,7 +299,7 @@ def get_chapter(
 @router.get("/chapters/{chapter_id}/versions")
 def list_chapter_versions(
     chapter_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> list[dict[str, object]]:
     repo = ChapterRepository(session)
     chapter = repo.get_chapter(chapter_id)
@@ -328,11 +328,13 @@ def list_chapter_versions(
 def gate_chapter(
     chapter_id: str,
     payload: ChapterGateRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict:
     from app.api.routes_review_center import (
-        ReviewCenterApproveRequest, ReviewCenterReviseRequest,
-        approve_manual_review_chapter, return_chapter_to_revision_pending,
+        ReviewCenterApproveRequest,
+        ReviewCenterReviseRequest,
+        approve_manual_review_chapter,
+        return_chapter_to_revision_pending,
     )
 
     if payload.action == "approve":
@@ -347,7 +349,7 @@ def gate_chapter(
 @router.post("/chapters/{chapter_id}/retry-publish", status_code=202)
 def retry_publish(
     chapter_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, str]:
     repo = PublishJobRepository(session)
     job = repo.get_latest_for_chapter(chapter_id)
@@ -371,7 +373,7 @@ def retry_publish(
 @router.post("/chapters/{chapter_id}/archive-publish-failure", status_code=202)
 def archive_publish_failure(
     chapter_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, str]:
     repo = PublishJobRepository(session)
     job = repo.get_latest_for_chapter(chapter_id)

@@ -7,17 +7,15 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field, StringConstraints, field_validator
-
-from app.agents.persister import persist_draft_chapter, persist_review_candidate
-from app.agents.context_builder import build_chapter_context_from_memory
-from app.db.repositories import ChapterRepository
-from app.api.dependencies import get_session
-from app.services.llm_client import LLMConfigurationError
 from sqlalchemy.orm import Session
 
+from app.agents.context_builder import build_chapter_context_from_memory
+from app.agents.persister import persist_draft_chapter, persist_review_candidate
+from app.api.dependencies import get_session
+from app.db.repositories import ChapterRepository
+from app.services.llm_client import LLMConfigurationError
 from app.ui.creation_page import render_creation_page
 from app.ui.ops_page import render_ops_page
-
 
 router = APIRouter()
 DraftTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
@@ -80,7 +78,7 @@ def ops_page() -> HTMLResponse:
 @router.post("/api/creation/save")
 def save_chapter_draft(
     payload: CreationSaveRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, Any]:
     if payload.create_publish_job:
         raise HTTPException(status_code=409, detail="请先提交审核，批准后创建发布任务")
@@ -109,7 +107,7 @@ def save_chapter_draft(
 @router.post("/api/creation/review")
 def mark_chapter_for_manual_review(
     payload: CreationManualReviewRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, Any]:
     if payload.review_action not in {"review_pending", "revision_pending"}:
         raise HTTPException(status_code=400, detail="invalid review action")
@@ -150,7 +148,7 @@ def mark_chapter_for_manual_review(
 def generate_chapter(
     payload: CreationGenerateRequest,
     request: Request,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> CreationGenerateResponse:
     writer = getattr(request.app.state, "creation_writer", None)
     if writer is None:
@@ -177,7 +175,7 @@ def generate_chapter(
 def generate_chapter_stream(
     payload: CreationGenerateRequest,
     request: Request,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> StreamingResponse:
     writer = getattr(request.app.state, "creation_writer", None)
     stream_writer = getattr(request.app.state, "creation_stream_writer", None)

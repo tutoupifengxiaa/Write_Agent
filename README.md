@@ -5,8 +5,7 @@
 需要 Python 3.11 或更高版本。在项目根目录执行以下 PowerShell 命令：
 
 ```powershell
-$writeAgentDeps = python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']))"
-python -m pip install $writeAgentDeps
+python -m pip install -e ".[dev]"
 if (-not (Test-Path -LiteralPath '.env')) { Copy-Item -LiteralPath '.env.example' -Destination '.env' }
 ```
 
@@ -21,7 +20,9 @@ python -m app.launch
 
 Web 默认仅监听本机。监听地址为 `127.0.0.1`、`localhost` 或 `::1` 时可不设访问令牌。监听其他地址时，必须先在 `.env` 中设置 `ACCESS_TOKEN=YOUR_TOKEN_HERE`。配置后，浏览器用户在 `/login` 输入令牌，API 客户端通过 `Authorization: Bearer YOUR_TOKEN_HERE` 请求头认证。
 
-当前按源码目录运行。项目尚未配置 flat-layout 包发现，Alembic 资源也在包外；`pip install -e .` 和 wheel 构建目前不可用，打包支持后续单独处理。
+默认使用 SQLite 和 stub 发布客户端。使用 Playwright 发布时，执行 `python -m pip install -e ".[dev,publish]"`，再执行 `python -m playwright install chromium`。使用 PostgreSQL 时，执行 `python -m pip install -e ".[dev,postgres]"`。两项均需启用时，可合并为 `".[dev,publish,postgres]"`。
+
+可编辑安装从源码目录读取 `alembic.ini` 和 `alembic/` 迁移脚本。wheel 安装不包含这两项资源，需要执行数据库迁移时请使用可编辑安装。
 
 运行 Worker：
 
@@ -35,7 +36,7 @@ python -m app.launch worker --max-cycles 1
 
 配置模板使用文件 SQLite（`sqlite+pysqlite:///./write_agent.db`），Web 与 Worker 需要从同一项目根目录启动，才能共享数据。未配置 `DATABASE_URL` 时，程序回退到内存 SQLite，进程退出后数据消失，且 Web 与 Worker 不共享数据。数据库表和兼容迁移在应用初始化时执行。发布默认为禁用（`PUBLISH_MODE` 为空），浏览器模式默认为 `stub`；真实模型及平台配置需自行验证。
 
-本仓库上传范围包含应用源码、迁移、启动说明及 `.env.example`；测试文件、`docs/`、本地 `.env`、数据库、日志、虚拟环境及缓存通过 `.gitignore` 排除，仅保留在本地。
+本仓库的版本控制范围包含应用源码、迁移、测试及 fixtures、启动说明和 `.env.example`。`docs/`、本地 `.env`、数据库、日志、虚拟环境及缓存通过 `.gitignore` 排除，仅保留在本地。
 
 仓储写入只执行 `flush`，调用方负责 `commit` 或 `rollback`。手动使用 `WriteAgentApplication.from_settings(...)` 时应在结束后调用 `close()`；Web 关闭及 Worker 退出会自动释放会话和模型客户端。
 

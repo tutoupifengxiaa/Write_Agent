@@ -11,6 +11,7 @@ import httpx
 
 from app.config import secret_value
 
+
 class LLMConfigurationError(ValueError):
     pass
 
@@ -44,7 +45,7 @@ def _retry_after(error: httpx.HTTPError) -> float | None:
 
 
 class LLMClient(ABC):
-    def close(self) -> None:
+    def close(self) -> None:  # noqa: B027 - Clients without owned resources can inherit this no-op.
         pass
 
     @abstractmethod
@@ -204,7 +205,6 @@ class OpenAIResponsesLLMClient(LLMClient):
         raise ValueError("LLM response missing output text")
 
     def _iter_sse_events(self, response: httpx.Response):
-        event_name = ""
         data_lines: list[str] = []
         for line in response.iter_lines():
             if line == "":
@@ -213,13 +213,9 @@ class OpenAIResponsesLLMClient(LLMClient):
                         yield json.loads("\n".join(data_lines))
                     except json.JSONDecodeError:
                         pass
-                event_name = ""
                 data_lines = []
                 continue
             if line == ":" or line.startswith(":"):
-                continue
-            if line.startswith("event: "):
-                event_name = line[7:]
                 continue
             if line.startswith("data: "):
                 data_lines.append(line[6:])

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "write-agent"
 version = "0.1.0"
@@ -5,15 +9,13 @@ description = "Write Agent project skeleton"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi",
-    "uvicorn",
-    "sqlalchemy",
-    "psycopg[binary]",
-    "alembic",
-    "pydantic-settings",
-    "playwright",
-    "httpx",
-    "langgraph>=1.2,<1.3",
+    "fastapi>=0.162.5",
+    "uvicorn>=0.54.0",
+    "sqlalchemy>=2.1.8",
+    "alembic>=1.20.1",
+    "pydantic-settings>=2.16.3",
+    "httpx>=0.28.1",
+    "langgraph>=1.2.21,<1.3",
 ]
 
 [project.scripts]
@@ -21,9 +23,25 @@ write-agent = "app.launch:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
+    "pytest>=9.2.0",
+    "ruff",
 ]
+publish = ["playwright>=1.65.1"]
+postgres = ["psycopg[binary]>=3.3.9"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["static/*", "static/**/*", "prompts/*.md"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]

@@ -14,7 +14,6 @@ from app.db.models import Chapter, ChapterVersion
 from app.db.repositories import ChapterRepository
 from app.ui.review_center_page import render_review_center_page
 
-
 router = APIRouter()
 
 
@@ -38,7 +37,7 @@ def review_center_page() -> HTMLResponse:
 @router.post("/api/review-center/approve")
 def approve_manual_review_chapter(
     payload: ReviewCenterApproveRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, Any]:
     repo = ChapterRepository(session)
     chapter = repo.get_chapter(payload.chapter_id)
@@ -110,7 +109,7 @@ def approve_manual_review_chapter(
 @router.post("/api/review-center/revise")
 def return_chapter_to_revision_pending(
     payload: ReviewCenterReviseRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> dict[str, Any]:
     repo = ChapterRepository(session)
     chapter = repo.get_chapter(payload.chapter_id)

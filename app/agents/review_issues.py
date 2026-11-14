@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from hashlib import sha256
 
-
 ALLOWED_TYPES = {"coverage", "constraint", "continuity", "logic", "pacing", "safety", "style"}
 ALLOWED_SEVERITIES = {"low", "medium", "high"}
 SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}

@@ -5,7 +5,6 @@ from fastapi.responses import HTMLResponse
 
 from app.ui.library_page import render_library_page
 
-
 router = APIRouter()
 
 
