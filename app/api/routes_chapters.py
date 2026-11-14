@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.planner import plan_next_chapter
 from app.api.dependencies import get_session
-from app.db.models import ChapterVersion, PublishJob
+from app.db.models import Chapter, ChapterVersion, PublishJob
 from app.db.repositories import BookRepository, ChapterRepository, PublishJobRepository
 from app.ui.chapter_detail_page import render_chapter_detail_page
 
@@ -193,6 +193,7 @@ def list_book_chapters(
             "title": chapter.title,
             "status": chapter.status,
             "current_version_id": chapter.current_version_id,
+            "error_message": chapter.error_message,
         }
         for chapter in chapters
     ]
@@ -368,6 +369,26 @@ def retry_publish(
         raise HTTPException(status_code=409, detail="只有失败且未执行中的发布任务可以重试")
     session.commit()
     return {"chapter_id": chapter_id, "job_id": job.id, "status": job.status}
+
+
+@router.post("/chapters/{chapter_id}/requeue-generation", status_code=202)
+def requeue_generation(
+    chapter_id: str,
+    session: Session = Depends(get_session),
+) -> dict[str, str]:
+    if ChapterRepository(session).get_chapter(chapter_id) is None:
+        raise HTTPException(status_code=404, detail="chapter not found")
+    # Only a failed chapter that no worker holds may go back; reset its retry budget.
+    result = session.execute(update(Chapter).where(
+        Chapter.id == chapter_id, Chapter.status == "generation_failed",
+        Chapter.claim_token.is_(None),
+    ).values(status="draft_planned", error_message=None, attempt_count=0,
+             next_attempt_at=None, lease_expires_at=None))
+    if result.rowcount != 1:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="只有生成失败且未执行中的章节可以重新排队")
+    session.commit()
+    return {"chapter_id": chapter_id, "status": "draft_planned"}
 
 
 @router.post("/chapters/{chapter_id}/archive-publish-failure", status_code=202)

@@ -179,6 +179,24 @@
         });
     }
 
+    function handleRequeueGeneration(chapterId) {
+      resetFeedback();
+      setIsSubmitting(true);
+      requestJson("/chapters/" + encodeURIComponent(chapterId) + "/requeue-generation", {
+        method: "POST",
+      })
+        .then(function () {
+          setSuccess("已重新加入生成队列，后台 Worker 会重新生成本章");
+          return loadBook(selectedBook.id);
+        })
+        .catch(function (requestError) {
+          setError(requestError.message || "重新排队失败");
+        })
+        .finally(function () {
+          setIsSubmitting(false);
+        });
+    }
+
     const filteredChapters = chapters.filter(function (chapter) {
       const matchesStatus = chapterStatusFilter === "all" || chapter.status === chapterStatusFilter;
       const matchesSearch =
@@ -382,9 +400,29 @@
                     ReactLib.createElement("strong", null, "已保存版本："),
                     ReactLib.createElement("span", null, selectedChapter.current_version_id ? "已有可回填版本" : "尚未保存过正文")
                   ),
+                  selectedChapter.status === "generation_failed"
+                    ? ReactLib.createElement(Feedback, {
+                        className: "library-job-error",
+                        message: "生成失败：" + (selectedChapter.error_message || "原因未记录"),
+                      })
+                    : null,
                   ReactLib.createElement(
                     "div",
                     { className: "library-button-row" },
+                    selectedChapter.status === "generation_failed"
+                      ? ReactLib.createElement(
+                          "button",
+                          {
+                            type: "button",
+                            className: "library-secondary-button",
+                            onClick: function () {
+                              handleRequeueGeneration(selectedChapter.id);
+                            },
+                            disabled: isSubmitting,
+                          },
+                          "重新排队生成"
+                        )
+                      : null,
                     ReactLib.createElement(
                       "a",
                       {
