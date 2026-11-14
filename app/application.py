@@ -31,7 +31,8 @@ from app.api.routes_review_center import router as review_center_router
 from app.api.routes_trends import router as trends_router
 from app.config import secret_value
 from app.config import settings as default_settings
-from app.db.base import SessionLocal, create_engine_from_settings, engine, make_session_factory, warn_if_memory_database
+from app.db import base as db_base
+from app.db.base import create_engine_from_settings, make_session_factory, warn_if_memory_database
 from app.db.schema_migrations import upgrade_database
 from app.orchestrator.scheduler import Scheduler
 from app.services.embedding import (
@@ -52,7 +53,7 @@ class WriteAgentApplication:
     scheduler: Scheduler
     reviser_client: OpenAIResponsesLLMClient | None = None
     embedding_client: Any = None
-    session_factory: Callable[[], Any] = SessionLocal
+    session_factory: Callable[[], Any] | None = None
     _owned_engine: Engine | None = field(default=None, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
@@ -165,11 +166,11 @@ def _database_binding(settings, session_factory=None):
     if getattr(settings, "database_url", None):
         db_engine = create_engine_from_settings(settings)
         return db_engine, session_factory or make_session_factory(db_engine), True
-    return engine, session_factory or SessionLocal, False
+    return db_base.engine, session_factory or db_base.SessionLocal, False
 
 
 def initialize_database(db_engine: Engine | None = None) -> None:
-    upgrade_database(engine if db_engine is None else db_engine)
+    upgrade_database(db_base.engine if db_engine is None else db_engine)
 
 
 build_worker = WriteAgentApplication.build_worker
@@ -282,12 +283,11 @@ def create_fastapi_app(
     access_token: SecretStr | str | None = None,
 ) -> FastAPI:
     if initialize_database:
-        upgrade_database(engine)
+        upgrade_database(db_base.engine)
     app = FastAPI(lifespan=lifespan)
     token = secret_value(default_settings.access_token if access_token is None else access_token)
     if token.strip():
         _configure_access_control(app, sha256(token.encode()).hexdigest())
-    app.state.session_factory = SessionLocal
     app.state.creation_writer = writer
     app.state.creation_stream_writer = stream_writer
     app.state.direction_generator = direction_generator

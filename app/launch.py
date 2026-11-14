@@ -54,7 +54,7 @@ def _log_worker_event(event: str, **payload) -> None:
     logger.info(event, extra={key: payload[key] for key in WORKER_LOG_FIELDS if key in payload})
 
 
-def run_web(*, host: str = "127.0.0.1", port: int = 8000, open_browser: bool = True) -> int:
+def run_web(*, host: str = "127.0.0.1", port: int = 8888, open_browser: bool = True) -> int:
     has_token = bool(secret_value(settings.access_token).strip())
     if host.lower() not in {"127.0.0.1", "localhost", "::1"} and not has_token:
         print("ACCESS_TOKEN is required when listening on a non-local address", file=sys.stderr)

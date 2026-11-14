@@ -2304,3 +2304,25 @@ def test_chapter_detail_endpoint_returns_chapter_and_publish_summary() -> None:
     assert "Detail page should show this manual note." in response.text
     assert "/creation?book_id=book_chapter_detail" in response.text
     assert "/review-center" in response.text
+
+
+def test_settings_built_web_and_worker_never_create_default_engine(tmp_path) -> None:
+    # Fresh interpreter: the lazy module-level engine must stay unused when apps get their engine from settings.
+    script = """
+import sys
+from fastapi.testclient import TestClient
+from app.application import build_web_app, build_worker
+from app.config import Settings
+from app.db import base
+
+settings = Settings(_env_file=None, database_url="sqlite+pysqlite:///" + sys.argv[1],
+                    openai_api_key="", embedding_api_key="")
+build_worker(settings).close()
+with TestClient(build_web_app(settings)) as client:
+    assert client.get("/books").status_code == 200
+assert base._default_engine is None, "default engine was created"
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path / "app.db")], capture_output=True, text=True, timeout=60
+    )
+    assert result.returncode == 0, result.stderr[-2000:]

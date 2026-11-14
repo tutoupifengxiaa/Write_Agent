@@ -342,7 +342,7 @@ def test_create_llm_clients_from_settings_returns_writer_and_reviewer() -> None:
     assert clients["reviewer"].model == "review-model"
 
 
-@pytest.mark.parametrize("failure", ["rate_limit", "connect", "protocol"])
+@pytest.mark.parametrize("failure", ["rate_limit", "server_error", "connect", "protocol"])
 @pytest.mark.parametrize("stream", [False, True])
 def test_transient_failures_retry_then_fall_back(monkeypatch, failure, stream):
     sleeps = []
@@ -355,6 +355,8 @@ def test_transient_failures_retry_then_fall_back(monkeypatch, failure, stream):
         if model == "primary":
             if failure == "rate_limit":
                 return httpx.Response(429, headers={"Retry-After": "45"})
+            if failure == "server_error":
+                return httpx.Response(500)
             if failure == "connect":
                 raise httpx.ConnectError("offline", request=request)
             raise httpx.RemoteProtocolError("disconnected", request=request)

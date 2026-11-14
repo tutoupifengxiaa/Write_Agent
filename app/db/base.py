@@ -58,5 +58,20 @@ def make_session_factory(engine: Engine) -> sessionmaker:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
-engine = create_engine_from_settings(settings)
-SessionLocal = make_session_factory(engine)
+_default_engine: Engine | None = None
+_default_session_factory: sessionmaker | None = None
+
+
+def __getattr__(name: str):
+    # The module-level engine is created on first use only, so Web and Worker
+    # processes that build their own engine from settings never open a second one.
+    global _default_engine, _default_session_factory
+    if name == "engine":
+        if _default_engine is None:
+            _default_engine = create_engine_from_settings(settings)
+        return _default_engine
+    if name == "SessionLocal":
+        if _default_session_factory is None:
+            _default_session_factory = make_session_factory(__getattr__("engine"))
+        return _default_session_factory
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

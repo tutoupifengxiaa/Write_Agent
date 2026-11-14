@@ -145,6 +145,7 @@ def test_application_upgrades_global_engine_before_session_and_clients(
     monkeypatch,
 ) -> None:
     import app.application as application_module
+    from app.db import base as db_base
 
     events: list[str] = []
     sentinel_engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -153,7 +154,9 @@ def test_application_upgrades_global_engine_before_session_and_clients(
         def close(self) -> None:
             pass
 
-    monkeypatch.setattr(application_module, "engine", sentinel_engine)
+    # The global engine is created lazily in app.db.base; patch the cached default it hands out.
+    monkeypatch.setattr(db_base, "_default_engine", sentinel_engine)
+    monkeypatch.setattr(db_base, "_default_session_factory", None)
     monkeypatch.setattr(
         Base.metadata,
         "create_all",

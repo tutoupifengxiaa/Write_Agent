@@ -148,7 +148,7 @@ class OpenAIResponsesLLMClient(LLMClient):
                 ) as exc:
                     if emitted:
                         raise
-                    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code not in {429, 502, 503, 504}:
+                    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code not in {429, 500, 502, 503, 504}:
                         raise
                     last_attempt = attempt == self._max_retries
                     if last_attempt and index == len(models) - 1:

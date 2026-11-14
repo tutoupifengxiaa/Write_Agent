@@ -543,3 +543,10 @@ def test_worker_cycle_failed_log_includes_error_type():
     output = launch.WorkerEventFormatter().format(record)
 
     assert "error_type=OperationalError" in output
+
+
+def test_run_web_and_browser_defaults_use_the_documented_port() -> None:
+    import inspect
+
+    assert inspect.signature(launch.run_web).parameters["port"].default == 8888
+    assert inspect.signature(launch.open_creation_page).parameters["port"].default == 8888
