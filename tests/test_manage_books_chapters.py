@@ -141,3 +141,15 @@ def test_delete_chapter_removes_only_that_chapters_data(setup):
                      "embeddings": 1}
     assert counts(factory, "drop") == FULL
     assert client.delete("/chapters/keep1").status_code == 404
+
+
+def test_new_chapter_refuses_a_taken_number_or_missing_book(setup):
+    client, factory = setup
+    new = {"book_id": "keep", "title": "新章", "goal": {"objective": "推进"}}
+    taken = client.post("/chapters", json={**new, "chapter_number": 2})
+    assert taken.status_code == 409 and "第 2 章已存在" in taken.json()["detail"]
+    assert client.post("/chapters", json={**new, "book_id": "nope", "chapter_number": 9}).status_code == 404
+    # The same number is still free in another book, and a fresh number works.
+    assert client.post("/chapters", json={**new, "book_id": "drop", "chapter_number": 3}).status_code == 201
+    assert client.post("/chapters", json={**new, "chapter_number": 3}).status_code == 201
+    assert counts(factory, "keep")["chapters"] == 3

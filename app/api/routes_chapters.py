@@ -42,11 +42,22 @@ class ChapterPlanRequest(BaseModel):
     target_words: int = Field(default=2500, gt=0, le=50000)
 
 
+def _ensure_chapter_slot_free(session: Session, book_id: str, chapter_number: int) -> None:
+    """New chapters need an existing book and a chapter number not yet used in it."""
+    if BookRepository(session).get_book(book_id) is None:
+        raise HTTPException(status_code=404, detail="book not found")
+    if session.scalar(select(Chapter.id).where(
+        Chapter.book_id == book_id, Chapter.chapter_number == chapter_number,
+    ).limit(1)):
+        raise HTTPException(status_code=409, detail=f"第 {chapter_number} 章已存在，请换一个章节号")
+
+
 @router.post("/chapters", status_code=201)
 def create_chapter(
     payload: ChapterCreateRequest,
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
+    _ensure_chapter_slot_free(session, payload.book_id, payload.chapter_number)
     repo = ChapterRepository(session)
     chapter = repo.create_planned_chapter(**payload.model_dump())
     session.commit()
@@ -65,14 +76,8 @@ def plan_chapter(
     payload: ChapterPlanRequest,
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
-    book_repo = BookRepository(session)
+    _ensure_chapter_slot_free(session, payload.book_id, payload.chapter_number)
     chapter_repo = ChapterRepository(session)
-    if book_repo.get_book(payload.book_id) is None:
-        raise HTTPException(status_code=404, detail="book not found")
-    if session.scalar(select(Chapter.id).where(
-        Chapter.book_id == payload.book_id, Chapter.chapter_number == payload.chapter_number,
-    ).limit(1)):
-        raise HTTPException(status_code=409, detail=f"第 {payload.chapter_number} 章已存在，请换一个章节号")
     # Same view the writer gets: arcs covering this chapter, character states from earlier chapters.
     memory_repo = MemoryRepository(session)
     story_arcs = arcs_covering(memory_repo.list_story_arcs(payload.book_id), payload.chapter_number)
