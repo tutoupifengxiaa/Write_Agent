@@ -95,8 +95,12 @@
 
     function loadHistory() {
       return requestJson("/trends/captures?limit=20")
-        .then(function (rows) { setCaptures(Array.isArray(rows) ? rows : []); })
-        .catch(function () { setCaptures([]); });
+        .then(function (rows) {
+          const list = Array.isArray(rows) ? rows : [];
+          setCaptures(list);
+          return list;
+        })
+        .catch(function () { setCaptures([]); return []; });
     }
 
     function showCapture(snapshots, payloadInsights, id) {
@@ -170,9 +174,11 @@
       return captureTime(capture.captured_at) + " · " + succeeded + "/" + providers.length + " 个平台成功";
     }
 
+    // Opening the page shows the latest saved capture; collecting new rankings only happens on request.
     useEffect(function () {
-      loadHistory();
-      loadCapture();
+      loadHistory().then(function (list) {
+        if (list.length > 0 && !captureRequest.current) loadSavedCapture(list[0].capture_id);
+      });
     }, []);
 
     function updateField(name, value) {
@@ -310,7 +316,7 @@
             "div",
             { className: "radar-ranking" },
             hotlists.length === 0
-              ? ReactLib.createElement("div", { className: "radar-empty" }, isCapturing ? "正在采集榜单..." : "本次采集没有可展示的平台数据。")
+              ? ReactLib.createElement("div", { className: "radar-empty" }, isCapturing ? "正在加载榜单..." : captureId ? "本次采集没有可展示的平台数据。" : "还没有采集记录，点击「刷新采集」获取最新榜单。")
               : hotlists.filter(function (provider) { return provider.provider === activeProvider; }).map(function (provider) {
               return ReactLib.createElement(
                 "section",
