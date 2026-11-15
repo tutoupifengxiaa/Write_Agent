@@ -295,7 +295,9 @@
         headers: { "Content-Type": "application/json" },
       })
         .then(function (payload) {
-          setPlanMessage("已根据章节种子批量创建 " + (payload.created_count || 0) + " 个计划章节。");
+          const skipped = payload.skipped_chapter_numbers || [];
+          setPlanMessage("已根据章节种子批量创建 " + (payload.created_count || 0) + " 个计划章节。"
+            + (skipped.length ? "第 " + skipped.join("、") + " 章已存在，已跳过。" : ""));
         })
         .catch(function (requestError) {
           setError(requestError.message || "批量建章失败");

@@ -153,3 +153,23 @@ def test_new_chapter_refuses_a_taken_number_or_missing_book(setup):
     assert client.post("/chapters", json={**new, "book_id": "drop", "chapter_number": 3}).status_code == 201
     assert client.post("/chapters", json={**new, "chapter_number": 3}).status_code == 201
     assert counts(factory, "keep")["chapters"] == 3
+
+
+def test_outline_batch_skips_chapters_that_already_exist(setup):
+    client, factory = setup
+    with factory() as session:
+        session.get(Book, "keep").book_outline = {"chapter_seed_plan": [
+            {"chapter": number, "goal": f"目标{number}"} for number in (2, 3, 4, 3)
+        ]}
+        session.commit()
+
+    first = client.post("/books/keep/chapters/from-outline")
+    assert first.status_code == 201
+    assert [item["chapter_number"] for item in first.json()["items"]] == [3, 4]
+    assert first.json()["skipped_chapter_numbers"] == [2, 3]
+    with factory() as session:
+        assert session.scalar(select(Chapter.title).where(Chapter.id == "keep2")) == "keep2"
+
+    again = client.post("/books/keep/chapters/from-outline")
+    assert again.status_code == 409 and "都已存在" in again.json()["detail"]
+    assert counts(factory, "keep")["chapters"] == 4

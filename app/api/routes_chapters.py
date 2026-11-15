@@ -131,12 +131,19 @@ def create_chapters_from_outline(
         raise HTTPException(status_code=400, detail="chapter seed plan not found")
 
     context = book_repo.get_next_chapter_context(book_id)
+    # Running this again must not duplicate chapters: numbers already in the book are skipped.
+    taken_numbers = set(session.scalars(select(Chapter.chapter_number).where(Chapter.book_id == book_id)))
     created_items: list[dict[str, object]] = []
+    skipped_numbers: list[int] = []
     for seed in seed_plan:
         chapter_number = seed.get("chapter")
         chapter_goal = seed.get("goal")
         if not isinstance(chapter_number, int) or not isinstance(chapter_goal, str) or not chapter_goal.strip():
             continue
+        if chapter_number in taken_numbers:
+            skipped_numbers.append(chapter_number)
+            continue
+        taken_numbers.add(chapter_number)
 
         title = seed.get("title")
         if not isinstance(title, str) or not title.strip():
@@ -185,6 +192,8 @@ def create_chapters_from_outline(
         )
 
     if not created_items:
+        if skipped_numbers:
+            raise HTTPException(status_code=409, detail="大纲里的章节都已存在，没有新的章节需要创建")
         raise HTTPException(status_code=400, detail="chapter seed plan not found")
 
     session.commit()
@@ -192,6 +201,7 @@ def create_chapters_from_outline(
         "book_id": book_id,
         "created_count": len(created_items),
         "items": created_items,
+        "skipped_chapter_numbers": skipped_numbers,
     }
 
 
